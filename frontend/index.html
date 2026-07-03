@@ -262,6 +262,18 @@
   .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
   .toast.ok { border-color: rgba(47,158,94,.5); } .toast.err { border-color: rgba(214,69,69,.5); }
 
+  /* ── FB 贴文卡（步骤1 直接抓取子模式）── */
+  .fb-post {
+    background: var(--ink); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    cursor: pointer; transition: border-color .18s, transform .12s, box-shadow .18s; display: flex; flex-direction: column;
+  }
+  .fb-post:hover { border-color: var(--border-hi); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+  .fb-post.sel { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold-dim); }
+  .fb-post .thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; background: var(--panel-3); }
+  .fb-post .pbody { padding: 11px 12px; }
+  .fb-post .pmsg { font-size: 12.5px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; min-height: 40px; }
+  .fb-post .pdate { font-family: var(--mono); font-size: 10.5px; color: var(--muted-2); margin-top: 8px; }
+
   @media (max-width: 720px) {
     .grid.c2, .grid.c3 { grid-template-columns: 1fr; }
     .award-row { grid-template-columns: 1fr 1fr; }
@@ -313,10 +325,11 @@
   <!-- ══════════ STEP 1 ══════════ -->
   <section class="step active" data-step="1">
     <div class="card">
-      <div class="step-head"><span class="no">STEP 01</span><h2>抓取留言</h2><span class="hint">导入 CSV 文件，或直接粘贴文本</span></div>
+      <div class="step-head"><span class="no">STEP 01</span><h2>抓取留言</h2><span class="hint">导入 CSV、粘贴文本，或直接从 Facebook 抓取</span></div>
       <div class="tabs">
         <button id="tabFile" class="active">导入文件</button>
         <button id="tabPaste">粘贴文本</button>
+        <button id="tabScrape">直接抓取</button>
       </div>
 
       <div id="modeFile">
@@ -333,6 +346,71 @@
         <div class="row" style="margin-top:12px;">
           <button class="btn-ghost btn-sm" id="btnParsePaste">解析文本</button>
           <span class="note" id="pasteNote"></span>
+        </div>
+      </div>
+
+      <div id="modeScrape" style="display:none;">
+        <!-- 登录授权 -->
+        <label class="fld" style="margin-bottom:12px;">二选一登录：<b>方式 A</b> 用 Facebook 授权（需 App ID）或 <b>方式 B</b> 直接粘贴 Access Token。抓取直连 <code style="font-family:var(--mono)">graph.facebook.com</code>，Token 只留在本机内存。</label>
+
+        <div class="grid c2" style="align-items:end;margin-bottom:14px;">
+          <div>
+            <label class="fld">方式 A · Facebook App ID</label>
+            <div class="row" style="align-items:stretch;">
+              <input type="text" id="fbAppId" placeholder="例如 1494465264176752" style="flex:1;min-width:0;" />
+              <button class="btn-ghost btn-sm" id="fbBtnInit">初始化</button>
+            </div>
+          </div>
+          <div>
+            <label class="fld">&nbsp;</label>
+            <div class="row" style="align-items:stretch;">
+              <button class="btn-primary btn-sm" id="fbBtnLogin" disabled>用 Facebook 登录</button>
+              <button class="btn-danger btn-sm" id="fbBtnLogout" style="display:none;">登出</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div>
+          <label class="fld">方式 B · Access Token（User Token 或 Page Access Token · 无需 App ID）</label>
+          <div class="row" style="align-items:stretch;">
+            <input type="text" id="fbToken" placeholder="EAAB… 粘贴在这里" style="flex:1;min-width:0;" />
+            <button class="btn-ghost btn-sm" id="fbBtnUseToken">使用此 Token</button>
+          </div>
+          <div class="note" style="margin-top:8px;">到 <b>Graph API Explorer</b> 勾选 <code style="font-family:var(--mono)">pages_show_list</code>、<code style="font-family:var(--mono)">pages_read_engagement</code>、<code style="font-family:var(--mono)">pages_read_user_content</code>，生成后切成「Page Access Token」选你的粉专再复制。</div>
+        </div>
+
+        <div class="flash" id="fbLoginNote" style="margin-top:6px;"></div>
+
+        <!-- 选择粉专 + 贴文 -->
+        <div id="fbPickBox" style="display:none;">
+          <div class="divider"></div>
+          <div class="callout cyan" style="margin-bottom:14px;">已连接 Facebook。选择粉专并载入近期贴文，或手动输入贴文 ID（格式 <code style="font-family:var(--mono)">粉专ID_贴文ID</code>）。</div>
+
+          <div class="grid c2" style="align-items:end;">
+            <div>
+              <label class="fld">选择粉专</label>
+              <select id="fbPageSel"><option>登录后自动载入…</option></select>
+            </div>
+            <div class="row" style="align-items:stretch;">
+              <button class="btn-ghost btn-sm" id="fbBtnLoadFeed">载入近期贴文</button>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;">
+            <label class="fld">或手动输入贴文 ID</label>
+            <input type="text" id="fbManualPost" placeholder="例如 100xxxxxxxx_123xxxxxxxx" />
+          </div>
+
+          <div id="fbPosts" class="grid c3" style="margin-top:14px;"></div>
+
+          <div class="divider"></div>
+          <div class="row">
+            <button class="btn-cyan" id="fbBtnFetch" disabled>抓取留言（含回复）</button>
+            <span class="note" id="fbPickNote">尚未选定贴文</span>
+          </div>
+          <div id="fbLog" class="note" style="margin-top:12px;font-family:var(--mono);max-height:140px;overflow-y:auto;display:none;"></div>
         </div>
       </div>
 
@@ -532,8 +610,16 @@ document.querySelectorAll(".rail .node").forEach(nd => nd.onclick = () => gotoSt
 document.querySelectorAll("[data-goto]").forEach(b => b.onclick = () => gotoStep(+b.dataset.goto));
 
 /* ═══════════ STEP 1：抓取留言 ═══════════ */
-$("tabFile").onclick = () => { $("tabFile").classList.add("active"); $("tabPaste").classList.remove("active"); $("modeFile").style.display=""; $("modePaste").style.display="none"; };
-$("tabPaste").onclick = () => { $("tabPaste").classList.add("active"); $("tabFile").classList.remove("active"); $("modePaste").style.display=""; $("modeFile").style.display="none"; };
+function s1SwitchTab(active) {
+  const tabs = { tabFile:"modeFile", tabPaste:"modePaste", tabScrape:"modeScrape" };
+  for (const t in tabs) {
+    $(t).classList.toggle("active", t === active);
+    $(tabs[t]).style.display = (t === active) ? "" : "none";
+  }
+}
+$("tabFile").onclick = () => s1SwitchTab("tabFile");
+$("tabPaste").onclick = () => s1SwitchTab("tabPaste");
+$("tabScrape").onclick = () => s1SwitchTab("tabScrape");
 
 // 极简 CSV 解析（支持引号、逗号、换行）
 function parseCSV(text) {
@@ -629,6 +715,231 @@ $("btnParsePaste").onclick = () => {
 };
 
 $("s1Next").onclick = () => gotoStep(2);
+
+/* ═══════════ STEP 1 · 直接抓取（Facebook Graph API，浏览器直连）═══════════
+   端口自 Projects/Facebook留言抓取/index.html：方式A(SDK登录)/方式B(贴Token)，
+   列粉专 → 选贴文 → 抓全部顶层留言+回复（含分页）→ 映射进 state.raw。 */
+const FB_V = "v21.0";
+const FB_G = "https://graph.facebook.com/" + FB_V;
+const FB_CFIELDS = "id,message,from{id,name},created_time,like_count,comment_count";
+let FB_TOKEN = "";
+let FB_PAGES = [];        // {id,name,access_token}
+let FB_CUR_POST = null;   // {id, token}
+
+function fbNote(msg, kind) { const n = $("fbLoginNote"); n.textContent = msg || ""; n.className = "flash" + (kind ? " " + kind : ""); }
+function fbLog(msg, kind) {
+  const box = $("fbLog"); box.style.display = "block";
+  const d = h("div", { class: kind === "ok" ? "flash ok" : kind === "err" ? "flash err" : null }, msg);
+  box.appendChild(d); box.scrollTop = box.scrollHeight;
+}
+function fbFmtDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso); if (isNaN(d)) return iso;
+  const p = n => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth()+1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+function fbGet(path, params, token) {
+  const q = new URLSearchParams(Object.assign({}, params, { access_token: token })).toString();
+  return fetch(FB_G + path + "?" + q).then(async r => {
+    const j = await r.json();
+    if (j.error) throw new Error("Graph 错误：" + j.error.message);
+    return j;
+  });
+}
+function fbPageToken(pageId) { const p = FB_PAGES.find(x => x.id === pageId); return p ? p.access_token : FB_TOKEN; }
+
+// FB JS SDK（方式 A 需要；方式 B 不需要）
+function fbLoadSDK(appId) {
+  return new Promise((resolve, reject) => {
+    if (window.FB) { FB.init({ appId, cookie: true, xfbml: false, version: FB_V }); return resolve(); }
+    window.fbAsyncInit = function () { FB.init({ appId, cookie: true, xfbml: false, version: FB_V }); resolve(); };
+    const js = document.createElement("script");
+    js.src = "https://connect.facebook.net/zh_CN/sdk.js";
+    js.async = true; js.defer = true;
+    js.onerror = () => reject(new Error("Facebook SDK 载入失败，请检查网络"));
+    document.head.appendChild(js);
+  });
+}
+
+$("fbBtnInit").onclick = async () => {
+  const appId = $("fbAppId").value.trim();
+  if (!appId) { toast("请先填 App ID", "err"); return; }
+  try { localStorage.setItem("rh_fb_app_id", appId); } catch(e){}
+  const btn = $("fbBtnInit"); btn.disabled = true; const old = btn.textContent; btn.textContent = "初始化中…";
+  try {
+    await fbLoadSDK(appId);
+    $("fbBtnLogin").disabled = false;
+    fbNote("SDK 已初始化，可用 Facebook 登录", "ok");
+  } catch (e) { fbNote(e.message, "err"); }
+  finally { btn.disabled = false; btn.textContent = old; }
+};
+
+$("fbBtnLogin").onclick = () => {
+  if (!window.FB) { toast("请先初始化 App ID", "err"); return; }
+  FB.login(r => {
+    if (r.status === "connected") { FB_TOKEN = r.authResponse.accessToken; fbOnConnected("user"); }
+    else fbNote("未完成授权", "err");
+  }, { scope: "pages_show_list,pages_read_engagement,pages_read_user_content", auth_type: "rerequest", return_scopes: true });
+};
+
+$("fbBtnLogout").onclick = () => {
+  if (window.FB) try { FB.logout(() => {}); } catch(e){}
+  FB_TOKEN = ""; FB_PAGES = []; FB_CUR_POST = null;
+  $("fbPickBox").style.display = "none";
+  $("fbBtnLogout").style.display = "none"; $("fbBtnLogin").style.display = "";
+  fbNote("已登出");
+};
+
+$("fbBtnUseToken").onclick = async () => {
+  const token = $("fbToken").value.trim();
+  if (!token) { toast("请先粘贴 Access Token", "err"); return; }
+  fbNote("验证 Token 中…");
+  FB_TOKEN = token; FB_PAGES = [];
+  try {
+    let isPageToken = false;
+    try {
+      const res = await fbGet("/me/accounts", { fields: "name,access_token,id", limit: 100 }, token);
+      FB_PAGES = res.data || [];
+      let next = res.paging && res.paging.next;
+      while (next) { const r = await fetch(next).then(x => x.json()); FB_PAGES = FB_PAGES.concat(r.data || []); next = r.paging && r.paging.next; }
+      if (FB_PAGES.length === 0) isPageToken = true;
+    } catch (e) { isPageToken = true; }
+    if (isPageToken) {
+      const me = await fbGet("/me", { fields: "id,name" }, token);
+      FB_PAGES = [{ id: me.id, name: me.name, access_token: token }];
+      fbNote("Page Token 模式 · 粉专：" + me.name, "ok");
+    } else {
+      fbNote("User Token 模式 · 找到 " + FB_PAGES.length + " 个粉专", "ok");
+    }
+    fbOnConnected("token");
+  } catch (e) { fbNote("Token 无效或权限不足：" + e.message, "err"); }
+};
+
+async function fbOnConnected(via) {
+  // 方式 A 登录后需自己拉粉专列表；方式 B 已在上面填好 FB_PAGES
+  if (via === "user") {
+    $("fbBtnLogin").style.display = "none"; $("fbBtnLogout").style.display = "";
+    fbNote("正在读取你管理的粉专…");
+    try {
+      const res = await fbGet("/me/accounts", { fields: "name,access_token,id", limit: 100 }, FB_TOKEN);
+      FB_PAGES = res.data || [];
+      let next = res.paging && res.paging.next;
+      while (next) { const r = await fetch(next).then(x => x.json()); FB_PAGES = FB_PAGES.concat(r.data || []); next = r.paging && r.paging.next; }
+      if (FB_PAGES.length === 0) { fbNote("没有可管理的粉专（需为该粉专的管理员）", "err"); }
+      else fbNote("找到 " + FB_PAGES.length + " 个粉专", "ok");
+    } catch (e) { fbNote(e.message, "err"); return; }
+  }
+  const sel = $("fbPageSel"); clear(sel);
+  FB_PAGES.forEach(p => sel.appendChild(h("option", { value: p.id }, p.name)));
+  $("fbPickBox").style.display = "";
+}
+
+$("fbBtnLoadFeed").onclick = async () => {
+  const pid = $("fbPageSel").value;
+  if (!pid) { toast("请先选择粉专", "err"); return; }
+  const box = $("fbPosts"); clear(box); box.appendChild(h("div", { class: "empty" }, "载入中…"));
+  try {
+    const res = await fbGet("/" + pid + "/feed", { fields: "message,created_time,full_picture", limit: 18 }, fbPageToken(pid));
+    const posts = res.data || [];
+    clear(box);
+    if (!posts.length) { box.appendChild(h("div", { class: "empty" }, "这个粉专暂无贴文")); return; }
+    posts.forEach(p => {
+      const thumb = p.full_picture ? h("img", { class: "thumb", src: p.full_picture, loading: "lazy" }) : h("div", { class: "thumb" });
+      const card = h("div", { class: "fb-post" }, thumb,
+        h("div", { class: "pbody" },
+          h("div", { class: "pmsg" }, p.message || "（无文字内容）"),
+          h("div", { class: "pdate" }, fbFmtDate(p.created_time))));
+      card.onclick = () => {
+        document.querySelectorAll(".fb-post").forEach(x => x.classList.remove("sel"));
+        card.classList.add("sel");
+        FB_CUR_POST = { id: p.id, token: fbPageToken(pid) };
+        $("fbBtnFetch").disabled = false;
+        $("fbPickNote").textContent = "已选：" + (p.message ? p.message.slice(0, 30) : p.id);
+      };
+      box.appendChild(card);
+    });
+  } catch (e) { clear(box); box.appendChild(h("div", { class: "empty" }, e.message)); }
+};
+
+$("fbManualPost").oninput = () => {
+  const v = $("fbManualPost").value.trim();
+  if (v) {
+    const pid = $("fbPageSel").value;
+    FB_CUR_POST = { id: v, token: pid ? fbPageToken(pid) : FB_TOKEN };
+    document.querySelectorAll(".fb-post").forEach(x => x.classList.remove("sel"));
+    $("fbBtnFetch").disabled = false; $("fbPickNote").textContent = "已输入贴文 ID：" + v;
+  } else if (!document.querySelector(".fb-post.sel")) { $("fbBtnFetch").disabled = true; }
+};
+
+$("fbBtnFetch").onclick = async () => {
+  if (!FB_CUR_POST) return;
+  const btn = $("fbBtnFetch"); btn.disabled = true;
+  clear($("fbLog")); $("fbLog").style.display = "block";
+  const flat = [];   // {message, like_count, comment_count, created_time}
+  fbLog("开始抓取顶层留言…");
+  try {
+    // 1) 抓齐所有顶层留言（跟随分页）
+    const tops = [];
+    let page = await fbGet("/" + FB_CUR_POST.id + "/comments",
+      { fields: FB_CFIELDS, filter: "toplevel", order: "chronological", limit: 100 }, FB_CUR_POST.token);
+    while (true) {
+      (page.data || []).forEach(c => tops.push(c));
+      fbLog("已抓 " + tops.length + " 条顶层留言…");
+      const next = page.paging && page.paging.next;
+      if (!next) break;
+      page = await fetch(next).then(x => x.json());
+      if (page.error) throw new Error(page.error.message);
+    }
+    // 2) 逐条：放入顶层留言，再补抓其回复（含分页）
+    let replyTotal = 0, withReplies = 0;
+    for (let i = 0; i < tops.length; i++) {
+      const c = tops[i];
+      flat.push(c);
+      if ((c.comment_count || 0) > 0) {
+        let got = 0;
+        try {
+          let rp = await fbGet("/" + c.id + "/comments", { fields: FB_CFIELDS, order: "chronological", limit: 100 }, FB_CUR_POST.token);
+          while (true) {
+            (rp.data || []).forEach(r => { flat.push(r); got++; });
+            const rnext = rp.paging && rp.paging.next;
+            if (!rnext) break;
+            rp = await fetch(rnext).then(x => x.json());
+            if (rp.error) break;
+          }
+        } catch (e) { /* 单条回复抓取失败不影响整体 */ }
+        replyTotal += got;
+        if (got > 0) { withReplies++; fbLog("留言 " + (i+1) + "/" + tops.length + " 补到 " + got + " 条回复（累计 " + replyTotal + "）"); }
+        else if ((i + 1) % 50 === 0) fbLog("补抓回复进度 " + (i+1) + "/" + tops.length + "…");
+      }
+    }
+    fbLog("完成：顶层 " + tops.length + " 条，回复 " + replyTotal + " 条，合计 " + flat.length + " 条", "ok");
+    // 3) 映射为 raw_comments：按 created_time 升序排序全体（顶层与回复交错），order 从 1 递增
+    const sorted = flat.slice().sort((a, b) => {
+      const ta = a.created_time ? Date.parse(a.created_time) : 0;
+      const tb = b.created_time ? Date.parse(b.created_time) : 0;
+      return ta - tb;
+    });
+    const comments = sorted
+      .filter(c => (c.message || "").trim() !== "")
+      .map((c, idx) => ({
+        order: idx + 1,
+        content: c.message || "",
+        likes: c.like_count || 0,
+        replies: c.comment_count || 0,
+        time: c.created_time || ""
+      }));
+    ingest(comments, "Facebook 抓取");
+  } catch (e) {
+    fbLog(e.message, "err");
+    toast("抓取失败：" + e.message, "err");
+    btn.disabled = false;
+  } finally {
+    if (FB_CUR_POST) btn.disabled = false;
+  }
+};
+
+// 恢复上次填过的 App ID
+try { const savedAppId = localStorage.getItem("rh_fb_app_id"); if (savedAppId) $("fbAppId").value = savedAppId; } catch(e){}
 
 /* ═══════════ STEP 2：清洗提取 ID 预览 ═══════════ */
 function extractId(text) { const m = ID_RE.exec(String(text||"")); return m ? m[1] : null; }
