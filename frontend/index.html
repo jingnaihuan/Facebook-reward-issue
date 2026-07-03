@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>社群互动发奖中台</title></head>
+<body><h1>社群互动发奖中台</h1><p id="status">连接中…</p>
+<script>
+fetch("/api/ping").then(r=>r.json()).then(d=>{
+  document.getElementById("status").textContent = d.ok ? "服务已就绪" : "异常";
+});
+</script></body></html>
