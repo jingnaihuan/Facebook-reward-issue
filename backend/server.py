@@ -103,6 +103,20 @@ class Handler(BaseHTTPRequestHandler):
                 out_path = os.path.join(common.work_dir(), b.get("filename", "发奖名单.xlsx"))
                 export_reward_workbook(out_path, b["awards"], b["participation"], b["invalid"])
                 self._json({"ok": True, "path": out_path})
+            elif self.path == "/api/eastblue":
+                b = self._body()
+                import subprocess
+                script = os.path.join(HERE, "reward_hub", "eastblue_download.py")
+                proc = subprocess.run(
+                    [sys.executable, script, "--url", b["url"],
+                     "--outdir", common.work_dir()],
+                    capture_output=True, text=True, timeout=180)
+                line = (proc.stdout or "").strip().splitlines()[-1] if proc.stdout else "{}"
+                res = json.loads(line)
+                if res.get("ok"):
+                    from reward_hub.eastblue_parse import parse_players
+                    res["players"] = parse_players(res["path"])
+                self._json(res)
             else:
                 self._json({"ok": False, "error": "not found"}, 404)
         except Exception as e:
