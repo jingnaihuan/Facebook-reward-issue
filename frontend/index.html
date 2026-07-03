@@ -1,8 +1,927 @@
-<!doctype html>
-<html lang="zh"><head><meta charset="utf-8"><title>社群互动发奖中台</title></head>
-<body><h1>社群互动发奖中台</h1><p id="status">连接中…</p>
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>社群互动发奖中台 · Reward Hub</title>
+<style>
+  :root {
+    --ink: #0a0c10;
+    --ink-2: #0e1116;
+    --panel: #14181f;
+    --panel-2: #191e27;
+    --panel-3: #1f2530;
+    --border: #262c37;
+    --border-hi: #38414f;
+    --text: #eef1f4;
+    --muted: #8a929e;
+    --muted-2: #575f6b;
+    --gold: #e8b64c;
+    --gold-dim: rgba(232,182,76,.14);
+    --gold-hi: #ffcd63;
+    --cyan: #55d6c8;
+    --cyan-dim: rgba(85,214,200,.13);
+    --red: #f06a63;
+    --red-dim: rgba(240,106,99,.13);
+    --green: #6fd18d;
+    --green-dim: rgba(111,209,141,.13);
+    --violet: #9d8cff;
+    --display: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --body: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, "Cascadia Code", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background:
+      radial-gradient(1300px 620px at 92% -12%, rgba(232,182,76,.06), transparent 58%),
+      radial-gradient(1000px 560px at -8% 108%, rgba(85,214,200,.055), transparent 55%),
+      var(--ink);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100%;
+  }
+  ::selection { background: var(--gold); color: #14100a; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ── Layout shell ── */
+  .shell { max-width: 1180px; margin: 0 auto; padding: 30px 26px 90px; }
+
+  header.brand { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 22px; }
+  .logo { display: flex; align-items: center; gap: 15px; }
+  .logo .mark {
+    width: 48px; height: 48px; border-radius: 14px; flex-shrink: 0;
+    background: linear-gradient(150deg, var(--gold), #c8842a);
+    display: grid; place-items: center; position: relative;
+    box-shadow: 0 10px 28px -10px rgba(232,182,76,.55), inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .logo .mark svg { width: 27px; height: 27px; }
+  .logo h1 { font-family: var(--display); font-weight: 800; font-size: 24px; letter-spacing: -.02em; line-height: 1.05; }
+  .logo .sub { font-family: var(--mono); font-size: 10.5px; color: var(--muted); letter-spacing: .16em; text-transform: uppercase; margin-top: 4px; }
+  .status-pill {
+    font-family: var(--mono); font-size: 11.5px; padding: 8px 14px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--muted);
+    display: flex; align-items: center; gap: 8px; white-space: nowrap;
+  }
+  .status-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted-2); transition: background .3s; }
+  .status-pill.on { color: var(--green); border-color: rgba(111,209,141,.35); }
+  .status-pill.on .dot { background: var(--green); animation: pulse 2.2s infinite; }
+  .status-pill.err { color: var(--red); border-color: rgba(240,106,99,.4); }
+  .status-pill.err .dot { background: var(--red); }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(111,209,141,.45)} 70%{box-shadow:0 0 0 7px rgba(111,209,141,0)} 100%{box-shadow:0 0 0 0 rgba(111,209,141,0)} }
+
+  /* ── Preset bar ── */
+  .preset-bar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--border); border-radius: 14px; padding: 13px 16px; margin-bottom: 22px;
+  }
+  .preset-bar .tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--gold); display: flex; align-items: center; gap: 7px; }
+  .preset-bar .tag svg { width: 15px; height: 15px; }
+  .preset-bar .spacer { flex: 1; min-width: 8px; }
+
+  /* ── Stepper rail ── */
+  .rail { display: flex; gap: 6px; margin-bottom: 26px; overflow-x: auto; padding-bottom: 4px; }
+  .rail .node {
+    flex: 1 1 0; min-width: 132px; text-align: left; cursor: pointer; position: relative;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 13px;
+    padding: 13px 15px; transition: border-color .2s, background .2s, transform .12s;
+  }
+  .rail .node:hover { border-color: var(--border-hi); }
+  .rail .node:active { transform: translateY(1px); }
+  .rail .node .rn { font-family: var(--mono); font-size: 11px; color: var(--muted-2); letter-spacing: .1em; display: flex; align-items: center; gap: 8px; }
+  .rail .node .rn b {
+    width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-size: 11px;
+    background: var(--ink); border: 1px solid var(--border); color: var(--muted); font-weight: 700;
+  }
+  .rail .node .rt { font-family: var(--display); font-weight: 700; font-size: 13.5px; margin-top: 9px; letter-spacing: -.01em; }
+  .rail .node .rd { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .rail .node.active { border-color: var(--gold); background: linear-gradient(180deg, var(--panel-2), var(--panel)); }
+  .rail .node.active .rn b { background: var(--gold); border-color: var(--gold); color: #14100a; }
+  .rail .node.active .rt { color: var(--gold); }
+  .rail .node.done .rn b { background: var(--green-dim); border-color: rgba(111,209,141,.4); color: var(--green); }
+  .rail .node.done .rn b::after { content: "✓"; }
+  .rail .node.done .rn b span { display: none; }
+
+  /* ── Step panels ── */
+  .step { display: none; animation: rise .45s cubic-bezier(.2,.7,.2,1) both; }
+  .step.active { display: block; }
+  @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  .card {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--border); border-radius: 18px; padding: 26px 26px;
+    position: relative; overflow: hidden;
+  }
+  .card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 1px; background: linear-gradient(90deg, transparent, var(--border-hi), transparent); }
+  .step-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+  .step-head .no { font-family: var(--mono); font-weight: 700; font-size: 12px; color: var(--gold); letter-spacing: .1em; }
+  .step-head h2 { font-family: var(--display); font-weight: 800; font-size: 20px; letter-spacing: -.02em; }
+  .step-head .hint { color: var(--muted); font-size: 12.5px; margin-left: auto; }
+
+  /* ── Form primitives ── */
+  label.fld { display: block; font-size: 12px; color: var(--muted); margin-bottom: 8px; letter-spacing: .02em; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+  .grid { display: grid; gap: 16px; }
+  .grid.c2 { grid-template-columns: 1fr 1fr; }
+  .grid.c3 { grid-template-columns: 1fr 1fr 1fr; }
+  input[type=text], input[type=number], select, textarea {
+    background: var(--ink); border: 1px solid var(--border); color: var(--text);
+    padding: 11px 13px; border-radius: 11px; font-family: var(--mono); font-size: 13px;
+    outline: none; transition: border-color .18s, box-shadow .18s; width: 100%;
+  }
+  textarea { font-family: var(--mono); line-height: 1.55; resize: vertical; min-height: 150px; }
+  input:focus, select:focus, textarea:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim); }
+  input::placeholder, textarea::placeholder { color: var(--muted-2); }
+  select { cursor: pointer; -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%238a929e' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
+    background-repeat: no-repeat; background-position: right 13px center; padding-right: 34px; }
+
+  button {
+    font-family: var(--body); font-weight: 600; font-size: 13.5px; cursor: pointer;
+    border: 1px solid transparent; border-radius: 11px; padding: 11px 20px;
+    transition: transform .12s, background .18s, border-color .18s, opacity .18s; white-space: nowrap;
+  }
+  button:active { transform: translateY(1px) scale(.99); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-primary { background: var(--gold); color: #14100a; box-shadow: 0 6px 20px -9px rgba(232,182,76,.6); }
+  .btn-primary:hover:not(:disabled) { background: var(--gold-hi); }
+  .btn-ghost { background: transparent; border-color: var(--border-hi); color: var(--text); }
+  .btn-ghost:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+  .btn-cyan { background: var(--cyan); color: #06201d; box-shadow: 0 6px 20px -9px rgba(85,214,200,.5); }
+  .btn-cyan:hover:not(:disabled) { background: #6ee7d8; }
+  .btn-sm { padding: 8px 14px; font-size: 12.5px; }
+  .btn-danger { background: transparent; border-color: rgba(240,106,99,.4); color: var(--red); }
+  .btn-danger:hover:not(:disabled) { background: var(--red-dim); }
+  select.compact { width: auto; min-width: 150px; }
+
+  .nav-row { display: flex; justify-content: space-between; gap: 12px; margin-top: 22px; }
+
+  /* ── Tabs ── */
+  .tabs { display: inline-flex; background: var(--ink); border: 1px solid var(--border); border-radius: 11px; padding: 3px; gap: 3px; margin-bottom: 16px; }
+  .tabs button { background: transparent; border: none; color: var(--muted); padding: 8px 17px; border-radius: 8px; font-size: 12.5px; }
+  .tabs button.active { background: var(--panel-3); color: var(--gold); box-shadow: inset 0 0 0 1px var(--border-hi); }
+
+  /* ── Chips (langs) ── */
+  .chips { display: flex; flex-wrap: wrap; gap: 9px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px; cursor: pointer; user-select: none;
+    background: var(--ink); border: 1px solid var(--border); border-radius: 10px; padding: 8px 13px;
+    font-family: var(--mono); font-size: 12.5px; color: var(--muted); transition: all .16s;
+  }
+  .chip:hover { border-color: var(--border-hi); color: var(--text); }
+  .chip input { display: none; }
+  .chip.on { background: var(--gold-dim); border-color: rgba(232,182,76,.45); color: var(--gold); }
+  .chip .cc { font-size: 10px; color: var(--muted-2); }
+  .chip.on .cc { color: var(--gold); }
+  .chip-tools { display: flex; gap: 10px; margin-bottom: 13px; }
+  .chip-tools a { font-size: 12px; color: var(--muted); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  .chip-tools a:hover { color: var(--gold); }
+
+  /* ── Tables ── */
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 13px; margin-top: 14px; max-height: 400px; overflow-y: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  thead th {
+    position: sticky; top: 0; z-index: 1; text-align: left; font-family: var(--mono); font-weight: 600;
+    font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    background: var(--panel-3); padding: 11px 13px; white-space: nowrap; border-bottom: 1px solid var(--border);
+  }
+  tbody td { padding: 10px 13px; border-bottom: 1px solid var(--border); white-space: nowrap; max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--panel-2); }
+  td.mono, th.mono { font-family: var(--mono); }
+  tr.ok td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+  tr.bad td:first-child { box-shadow: inset 3px 0 0 var(--red); }
+  .pill-id { font-family: var(--mono); background: var(--green-dim); color: var(--green); padding: 2px 8px; border-radius: 6px; font-size: 11.5px; }
+  .pill-no { font-family: var(--mono); background: var(--red-dim); color: var(--red); padding: 2px 8px; border-radius: 6px; font-size: 11.5px; }
+  .content-cell { max-width: 420px; white-space: normal; line-height: 1.45; }
+
+  /* ── Stats ── */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); gap: 12px; margin-bottom: 6px; }
+  .stat { background: var(--panel-3); border: 1px solid var(--border); border-radius: 13px; padding: 15px 17px; }
+  .stat .n { font-family: var(--mono); font-weight: 700; font-size: 25px; letter-spacing: -.02em; }
+  .stat .l { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .stat.g .n { color: var(--gold); } .stat.c .n { color: var(--cyan); } .stat.r .n { color: var(--red); } .stat.v .n { color: var(--green); }
+
+  /* ── Award builder ── */
+  .award-row {
+    display: grid; grid-template-columns: 1.4fr 1.3fr .7fr .8fr auto; gap: 10px; align-items: end;
+    background: var(--ink); border: 1px solid var(--border); border-radius: 13px; padding: 14px; margin-bottom: 11px;
+    animation: rise .3s ease both;
+  }
+  .award-row .seed-wrap { transition: opacity .18s; }
+  .award-row .seed-wrap.hide { opacity: .3; pointer-events: none; }
+  .award-row button.rm { padding: 11px 13px; }
+
+  /* ── Result sheets ── */
+  .sheet { margin-bottom: 20px; }
+  .sheet-head { display: flex; align-items: center; gap: 11px; margin-bottom: 4px; }
+  .sheet-head .badge { font-family: var(--mono); font-size: 11px; padding: 3px 9px; border-radius: 7px; letter-spacing: .04em; }
+  .badge.award { background: var(--gold-dim); color: var(--gold); }
+  .badge.part { background: var(--cyan-dim); color: var(--cyan); }
+  .badge.inv { background: var(--red-dim); color: var(--red); }
+  .sheet-head h3 { font-family: var(--display); font-weight: 700; font-size: 15px; }
+  .sheet-head .cnt { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: auto; }
+
+  /* ── Misc ── */
+  .note { font-size: 12.5px; color: var(--muted); line-height: 1.65; }
+  .note code { font-family: var(--mono); background: var(--ink); padding: 1.5px 6px; border-radius: 5px; color: var(--gold); font-size: 11.5px; border: 1px solid var(--border); }
+  .callout { background: var(--gold-dim); border: 1px solid rgba(232,182,76,.28); border-radius: 12px; padding: 13px 16px; font-size: 12.5px; line-height: 1.62; }
+  .callout.cyan { background: var(--cyan-dim); border-color: rgba(85,214,200,.28); }
+  .callout b { color: var(--gold); } .callout.cyan b { color: var(--cyan); }
+  .empty { text-align: center; color: var(--muted); padding: 34px 0; font-size: 13px; }
+  .divider { border-top: 1px dashed var(--border); margin: 20px 0; }
+  .drop { border: 1.5px dashed var(--border-hi); border-radius: 13px; padding: 26px; text-align: center; cursor: pointer; transition: all .18s; }
+  .drop:hover, .drop.over { border-color: var(--gold); background: var(--gold-dim); }
+  .drop .big { font-family: var(--display); font-weight: 700; font-size: 14px; }
+  .drop .sm { font-size: 12px; color: var(--muted); margin-top: 5px; }
+  .spinner { width: 15px; height: 15px; border: 2px solid rgba(20,16,10,.3); border-top-color: #14100a; border-radius: 50%; display: inline-block; animation: spin .7s linear infinite; vertical-align: -2px; margin-right: 8px; }
+  .btn-cyan .spinner { border-color: rgba(6,32,29,.3); border-top-color: #06201d; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .flash { font-size: 12.5px; margin-top: 4px; }
+  .flash.ok { color: var(--green); } .flash.err { color: var(--red); }
+  footer { text-align: center; color: var(--muted-2); font-size: 11.5px; font-family: var(--mono); margin-top: 34px; letter-spacing: .05em; }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--panel-3); border: 1px solid var(--border-hi); color: var(--text);
+    padding: 13px 22px; border-radius: 12px; font-size: 13px; box-shadow: 0 16px 40px -12px rgba(0,0,0,.6);
+    opacity: 0; transition: transform .3s cubic-bezier(.2,.8,.2,1), opacity .3s; z-index: 50; max-width: 80vw;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  .toast.ok { border-color: rgba(111,209,141,.5); } .toast.err { border-color: rgba(240,106,99,.5); }
+
+  @media (max-width: 720px) {
+    .grid.c2, .grid.c3 { grid-template-columns: 1fr; }
+    .award-row { grid-template-columns: 1fr 1fr; }
+    .award-row button.rm { grid-column: 1 / -1; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="brand">
+    <div class="logo">
+      <div class="mark">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M12 2l2.4 5.2 5.6.6-4.2 3.9 1.2 5.6L12 20l-5 2.8 1.2-5.6L4 13.3l5.6-.6L12 2z" fill="#14100a"/>
+        </svg>
+      </div>
+      <div>
+        <h1>社群互动发奖中台</h1>
+        <div class="sub">Community Reward Hub · 五步向导</div>
+      </div>
+    </div>
+    <div id="statusPill" class="status-pill"><span class="dot"></span><span id="statusText">连接中…</span></div>
+  </header>
+
+  <!-- Preset bar -->
+  <div class="preset-bar">
+    <span class="tag">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M5 3h11l3 3v15H5V3z" stroke="#e8b64c" stroke-width="1.6"/><path d="M8 3v6h7" stroke="#e8b64c" stroke-width="1.6"/></svg>
+      预设
+    </span>
+    <select id="presetSel" class="compact"><option value="">（未选择预设）</option></select>
+    <button class="btn-ghost btn-sm" id="btnLoadPreset">载入</button>
+    <div class="spacer"></div>
+    <input type="text" id="presetName" placeholder="预设名称" style="width:auto;min-width:150px;flex:0 1 auto;" />
+    <label class="note" style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;"><input type="checkbox" id="presetDefault" style="width:auto;" /> 设为默认</label>
+    <button class="btn-primary btn-sm" id="btnSavePreset">保存当前配置</button>
+  </div>
+
+  <!-- Stepper rail -->
+  <nav class="rail" id="rail">
+    <div class="node active" data-step="1"><div class="rn"><b><span>1</span></b> STEP 01</div><div class="rt">抓取留言</div><div class="rd">导入 / 粘贴</div></div>
+    <div class="node" data-step="2"><div class="rn"><b><span>2</span></b> STEP 02</div><div class="rt">清洗提取 ID</div><div class="rd">正则预览 · 去重</div></div>
+    <div class="node" data-step="3"><div class="rn"><b><span>3</span></b> STEP 03</div><div class="rt">拉取玩家信息</div><div class="rd">Eastblue 下载</div></div>
+    <div class="node" data-step="4"><div class="rn"><b><span>4</span></b> STEP 04</div><div class="rt">语言筛选</div><div class="rd">目标语种</div></div>
+    <div class="node" data-step="5"><div class="rn"><b><span>5</span></b> STEP 05</div><div class="rt">发奖 + 导出</div><div class="rd">规则 · 结算</div></div>
+  </nav>
+
+  <!-- ══════════ STEP 1 ══════════ -->
+  <section class="step active" data-step="1">
+    <div class="card">
+      <div class="step-head"><span class="no">STEP 01</span><h2>抓取留言</h2><span class="hint">导入 CSV 文件，或直接粘贴文本</span></div>
+      <div class="tabs">
+        <button id="tabFile" class="active">导入文件</button>
+        <button id="tabPaste">粘贴文本</button>
+      </div>
+
+      <div id="modeFile">
+        <div class="drop" id="drop">
+          <div class="big">点击选择 CSV 文件，或拖拽到此处</div>
+          <div class="sm">列顺序：序号 · 留言内容 · 按赞数 · 留言时间（回复数默认 0）。首行如为表头会自动跳过。</div>
+        </div>
+        <input type="file" id="fileInput" accept=".csv,text/csv" hidden />
+      </div>
+
+      <div id="modePaste" style="display:none;">
+        <label class="fld">每行一条留言，用 <b>制表符 / 逗号</b> 分隔为「序号　留言内容　按赞数　留言时间」；只有一列时则整行当作留言内容。</label>
+        <textarea id="pasteBox" placeholder="1&#9;帮我发奖1234567890 谢谢&#9;12&#9;2026-07-01 10:00&#10;2&#9;我的ID 1987654321&#9;3&#9;2026-07-01 10:05"></textarea>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn-ghost btn-sm" id="btnParsePaste">解析文本</button>
+          <span class="note" id="pasteNote"></span>
+        </div>
+      </div>
+
+      <div id="s1Preview"></div>
+
+      <div class="nav-row">
+        <span></span>
+        <button class="btn-primary" id="s1Next" disabled>下一步 · 清洗 ID →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ STEP 2 ══════════ -->
+  <section class="step" data-step="2">
+    <div class="card">
+      <div class="step-head"><span class="no">STEP 02</span><h2>清洗提取 ID</h2><span class="hint">正则 <code>(1\d{9})</code> · 绿=命中 红=无效</span></div>
+
+      <div class="grid c2" style="align-items:end;margin-bottom:6px;">
+        <div>
+          <label class="fld">去重策略（可存入预设）</label>
+          <select id="dedupSel">
+            <option value="earliest">最早一条（默认）</option>
+            <option value="all">全部保留</option>
+            <option value="best_likes">点赞最高一条</option>
+          </select>
+        </div>
+        <div class="callout" style="align-self:stretch;display:flex;align-items:center;">
+          同一玩家 ID 出现多条留言时，如何取舍。<b>去重仅影响最终参与池，不改动下方预览。</b>
+        </div>
+      </div>
+
+      <div class="stats" style="margin-top:16px;">
+        <div class="stat"><div class="n" id="s2Total">0</div><div class="l">留言总数</div></div>
+        <div class="stat v"><div class="n" id="s2Valid">0</div><div class="l">命中 ID</div></div>
+        <div class="stat r"><div class="n" id="s2Invalid">0</div><div class="l">无有效 ID</div></div>
+        <div class="stat g"><div class="n" id="s2Uniq">0</div><div class="l">去重后玩家</div></div>
+      </div>
+
+      <div id="s2Preview"></div>
+
+      <div class="nav-row">
+        <button class="btn-ghost" data-goto="1">← 返回</button>
+        <button class="btn-primary" data-goto="3">下一步 · 拉取玩家信息 →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ STEP 3 ══════════ -->
+  <section class="step" data-step="3">
+    <div class="card">
+      <div class="step-head"><span class="no">STEP 03</span><h2>拉取玩家信息</h2><span class="hint">从 Eastblue 自动下载（可存入预设）</span></div>
+
+      <div class="grid c3">
+        <div><label class="fld">游戏 ID (game_id)</label><input type="number" id="cfgGameId" value="97" /></div>
+        <div><label class="fld">拉取上限 (search_num)</label><input type="number" id="cfgSearchNum" value="1000" /></div>
+        <div><label class="fld">活跃时间 (last_act_time)</label>
+          <select id="cfgLastAct">
+            <option value="last_one_year">最近一年</option>
+            <option value="last_two_year">最近两年</option>
+            <option value="last_three_year" selected>最近三年</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;">
+        <label class="fld">游戏语种 (game_langs)</label>
+        <div class="chip-tools"><a id="langAll3">全选</a><a id="langNone3">清空</a></div>
+        <div class="chips" id="gameLangs"></div>
+      </div>
+
+      <div class="grid c2" style="margin-top:16px;align-items:end;">
+        <div><label class="fld">服务器 ID（可选，逗号分隔 server_ids）</label><input type="text" id="cfgServers" placeholder="留空=全部" /></div>
+        <label class="chip" style="justify-self:start;"><input type="checkbox" id="cfgExceptInternal" checked /> <span>排除内玩 (except_internal=1)</span></label>
+      </div>
+
+      <div class="divider"></div>
+      <div class="row">
+        <button class="btn-cyan" id="btnDownload">自动下载玩家表</button>
+        <span class="note" id="dlNote">尚未下载。将打开浏览器访问 Eastblue，首次可能需要手动登录。</span>
+      </div>
+      <div class="callout cyan" style="margin-top:14px;" id="dlUrlBox">
+        <b>请求 URL：</b><span id="dlUrl" class="note" style="word-break:break-all;font-family:var(--mono);"></span>
+      </div>
+
+      <div class="nav-row">
+        <button class="btn-ghost" data-goto="2">← 返回</button>
+        <button class="btn-primary" data-goto="4">下一步 · 语言筛选 →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ STEP 4 ══════════ -->
+  <section class="step" data-step="4">
+    <div class="card">
+      <div class="step-head"><span class="no">STEP 04</span><h2>语言筛选</h2><span class="hint">本次活动的目标语种（可存入预设）</span></div>
+      <div class="callout" style="margin-bottom:16px;">仅保留玩家语言在选中范围内的参与者；其余进入「无效」。默认只勾选 <b>en</b>。</div>
+      <div class="chip-tools"><a id="langAll4">全选</a><a id="langNone4">清空</a></div>
+      <div class="chips" id="targetLangs"></div>
+
+      <div class="nav-row">
+        <button class="btn-ghost" data-goto="3">← 返回</button>
+        <button class="btn-primary" data-goto="5">下一步 · 发奖规则 →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ STEP 5 ══════════ -->
+  <section class="step" data-step="5">
+    <div class="card">
+      <div class="step-head"><span class="no">STEP 05</span><h2>发奖规则 + 导出</h2><span class="hint">奖项按序结算，中奖者不重复（不存入预设）</span></div>
+
+      <div id="awardList"></div>
+      <button class="btn-ghost btn-sm" id="btnAddAward" style="margin-top:4px;">+ 添加奖项</button>
+
+      <div class="divider"></div>
+      <div class="row">
+        <button class="btn-primary" id="btnProcess">结算发奖</button>
+        <button class="btn-cyan" id="btnExport" disabled>导出 xlsx</button>
+        <span class="note" id="procNote">配置好奖项后点击结算，将调用后台完整流程。</span>
+      </div>
+
+      <div id="results" style="margin-top:20px;"></div>
+
+      <div class="nav-row">
+        <button class="btn-ghost" data-goto="4">← 返回</button>
+        <span></span>
+      </div>
+    </div>
+  </section>
+
+  <footer>本机运行 · 数据不出本地 · 127.0.0.1:8765</footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
 <script>
+/* ═══════════ DOM 工具（不使用 innerHTML 处理用户数据，防注入）═══════════ */
+function h(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  if (attrs) for (const k in attrs) {
+    const v = attrs[k];
+    if (v == null || v === false) continue;
+    if (k === "class") e.className = v;
+    else if (k === "text") e.textContent = v;
+    else if (k === "value" || k === "checked") e[k] = v;
+    else if (k.startsWith("on") && typeof v === "function") e[k.toLowerCase()] = v;
+    else e.setAttribute(k, v);
+  }
+  for (const kid of kids) {
+    if (kid == null || kid === false) continue;
+    e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  return e;
+}
+const $ = id => document.getElementById(id);
+function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+
+/* ═══════════ 全局状态 ═══════════ */
+const LANGS = ["en","fr","de","ja","ru","ko","es","tr","ar","it","pt","th"];
+const LANG_NAMES = {en:"英语",fr:"法语",de:"德语",ja:"日语",ru:"俄语",ko:"韩语",es:"西语",tr:"土耳其",ar:"阿拉伯",it:"意语",pt:"葡语",th:"泰语"};
+const ID_RE = /(?:^|\D)(1\d{9})(?!\d)/;      // 与后端 extract_id 一致
+const state = {
+  raw: [],          // raw_comments: {order,content,likes,replies,time}
+  players: {},      // {id: {...}}
+  result: null,     // /api/process 返回
+};
+
+/* ═══════════ Toast ═══════════ */
+let toastTimer;
+function toast(msg, kind) {
+  const t = $("toast"); t.textContent = msg; t.className = "toast show " + (kind||"");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = "toast", 2600);
+}
+
+/* ═══════════ 状态灯 ═══════════ */
 fetch("/api/ping").then(r=>r.json()).then(d=>{
-  document.getElementById("status").textContent = d.ok ? "服务已就绪" : "异常";
-});
-</script></body></html>
+  const p = $("statusPill");
+  if (d.ok) { p.className = "status-pill on"; $("statusText").textContent = "服务已就绪"; }
+  else { p.className = "status-pill err"; $("statusText").textContent = "服务异常"; }
+}).catch(()=>{ $("statusPill").className = "status-pill err"; $("statusText").textContent = "无法连接"; });
+
+/* ═══════════ 步骤导航 ═══════════ */
+let curStep = 1;
+function gotoStep(n) {
+  curStep = n;
+  document.querySelectorAll(".step").forEach(s => s.classList.toggle("active", +s.dataset.step === n));
+  document.querySelectorAll(".rail .node").forEach(nd => {
+    const s = +nd.dataset.step;
+    nd.classList.toggle("active", s === n);
+    nd.classList.toggle("done", s < n);
+  });
+  if (n === 2) renderExtractPreview();
+  if (n === 3) buildEastblueUrl();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+document.querySelectorAll(".rail .node").forEach(nd => nd.onclick = () => gotoStep(+nd.dataset.step));
+document.querySelectorAll("[data-goto]").forEach(b => b.onclick = () => gotoStep(+b.dataset.goto));
+
+/* ═══════════ STEP 1：抓取留言 ═══════════ */
+$("tabFile").onclick = () => { $("tabFile").classList.add("active"); $("tabPaste").classList.remove("active"); $("modeFile").style.display=""; $("modePaste").style.display="none"; };
+$("tabPaste").onclick = () => { $("tabPaste").classList.add("active"); $("tabFile").classList.remove("active"); $("modePaste").style.display=""; $("modeFile").style.display="none"; };
+
+// 极简 CSV 解析（支持引号、逗号、换行）
+function parseCSV(text) {
+  const rows = []; let row = [], field = "", i = 0, q = false;
+  while (i < text.length) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i+1] === '"') { field += '"'; i += 2; continue; } q = false; i++; continue; }
+      field += c; i++; continue;
+    }
+    if (c === '"') { q = true; i++; continue; }
+    if (c === ',') { row.push(field); field = ""; i++; continue; }
+    if (c === '\r') { i++; continue; }
+    if (c === '\n') { row.push(field); rows.push(row); row = []; field = ""; i++; continue; }
+    field += c; i++;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.some(c => c.trim() !== ""));
+}
+
+function looksLikeHeader(cells) {
+  const joined = cells.join("").toLowerCase();
+  return /序号|留言|按赞|点赞|时间|content|order|like|time|留言内容/.test(joined) && !/^\d+$/.test((cells[0]||"").trim());
+}
+
+// 把二维行数组转成 raw_comments
+function rowsToComments(rows) {
+  if (!rows.length) return [];
+  let start = 0;
+  if (looksLikeHeader(rows[0])) start = 1;
+  const out = [];
+  let auto = 1;
+  for (let i = start; i < rows.length; i++) {
+    const r = rows[i];
+    let order, content, likes, time;
+    if (r.length === 1) { order = auto; content = r[0]; likes = 0; time = ""; }
+    else {
+      order = parseInt(r[0], 10); if (isNaN(order)) order = auto;
+      content = (r[1]||"").trim();
+      likes = parseInt(r[2], 10) || 0;
+      time = (r[3]||"").trim();
+    }
+    auto++;
+    if (content === "") continue;
+    out.push({ order, content, likes, replies: 0, time });
+  }
+  return out;
+}
+
+function ingest(comments, srcLabel) {
+  if (!comments.length) { toast("未解析到任何留言", "err"); return; }
+  state.raw = comments;
+  state.result = null; $("btnExport").disabled = true;
+  renderS1Preview();
+  $("s1Next").disabled = false;
+  toast("已解析 " + comments.length + " 条留言（" + srcLabel + "）", "ok");
+}
+
+function renderS1Preview() {
+  const box = $("s1Preview"); clear(box);
+  if (!state.raw.length) return;
+  const head = ["序号","留言内容","按赞","时间"];
+  const rows = state.raw.slice(0, 200).map(c => h("tr", null,
+    h("td", {class:"mono"}, c.order),
+    h("td", {class:"content-cell"}, c.content),
+    h("td", {class:"mono"}, c.likes),
+    h("td", {class:"mono"}, c.time || "—")
+  ));
+  box.appendChild(h("div", {class:"note", style:"margin-top:16px;"}, "预览前 " + Math.min(200,state.raw.length) + " / 共 " + state.raw.length + " 条"));
+  box.appendChild(tableEl(head, rows));
+}
+
+// 文件导入
+$("drop").onclick = () => $("fileInput").click();
+$("fileInput").onchange = e => { const f = e.target.files[0]; if (f) readFile(f); };
+["dragover","dragenter"].forEach(ev => $("drop").addEventListener(ev, e => { e.preventDefault(); $("drop").classList.add("over"); }));
+["dragleave","drop"].forEach(ev => $("drop").addEventListener(ev, e => { e.preventDefault(); $("drop").classList.remove("over"); }));
+$("drop").addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) readFile(f); });
+function readFile(f) {
+  const rd = new FileReader();
+  rd.onload = () => { ingest(rowsToComments(parseCSV(rd.result)), f.name); };
+  rd.onerror = () => toast("读取文件失败", "err");
+  rd.readAsText(f, "utf-8");
+}
+
+// 粘贴解析
+$("btnParsePaste").onclick = () => {
+  const txt = $("pasteBox").value;
+  if (!txt.trim()) { toast("请先粘贴文本", "err"); return; }
+  // 每行按 tab 或逗号切；优先 tab
+  const rows = txt.split(/\n/).filter(l => l.trim() !== "").map(l => l.indexOf("\t") >= 0 ? l.split("\t") : l.split(","));
+  ingest(rowsToComments(rows), "粘贴");
+};
+
+$("s1Next").onclick = () => gotoStep(2);
+
+/* ═══════════ STEP 2：清洗提取 ID 预览 ═══════════ */
+function extractId(text) { const m = ID_RE.exec(String(text||"")); return m ? m[1] : null; }
+
+function dedupPreview(rows, strategy) {
+  // 复刻后端 dedup：earliest=按order最小 / best_likes=按likes最高 / all=全部
+  if (strategy === "all") return rows.length;
+  const by = {};
+  rows.forEach(r => {
+    const id = r._id;
+    if (!by[id]) { by[id] = r; return; }
+    if (strategy === "best_likes") { if (r.likes > by[id].likes) by[id] = r; }
+    else { if (r.order < by[id].order) by[id] = r; } // earliest
+  });
+  return Object.keys(by).length;
+}
+
+function renderExtractPreview() {
+  const rows = state.raw.map(c => ({ ...c, _id: extractId(c.content) }));
+  const valid = rows.filter(r => r._id);
+  const invalid = rows.filter(r => !r._id);
+  $("s2Total").textContent = rows.length;
+  $("s2Valid").textContent = valid.length;
+  $("s2Invalid").textContent = invalid.length;
+  $("s2Uniq").textContent = dedupPreview(valid, $("dedupSel").value);
+
+  const box = $("s2Preview"); clear(box);
+  if (!rows.length) { box.appendChild(h("div",{class:"empty"},"请先在第 1 步导入留言")); return; }
+  const head = ["状态","提取 ID","序号","留言内容","按赞"];
+  const trs = rows.slice(0, 300).map(r => h("tr", { class: r._id ? "ok" : "bad" },
+    h("td", null, r._id ? h("span",{class:"pill-id"},"命中") : h("span",{class:"pill-no"},"无 ID")),
+    h("td", {class:"mono"}, r._id || "—"),
+    h("td", {class:"mono"}, r.order),
+    h("td", {class:"content-cell"}, r.content),
+    h("td", {class:"mono"}, r.likes)
+  ));
+  box.appendChild(h("div",{class:"note",style:"margin-top:16px;"}, "预览前 " + Math.min(300,rows.length) + " 条 · 去重策略实时反映在上方统计"));
+  box.appendChild(tableEl(head, trs));
+}
+$("dedupSel").onchange = renderExtractPreview;
+
+/* ═══════════ STEP 3/4：语种 chips + Eastblue URL ═══════════ */
+function buildLangChips(container, checkedSet) {
+  clear(container);
+  LANGS.forEach(l => {
+    const cb = h("input", { type:"checkbox", value:l, checked: checkedSet.has(l) });
+    const chip = h("label", { class: "chip" + (checkedSet.has(l) ? " on" : "") },
+      cb, h("span", null, LANG_NAMES[l]), h("span",{class:"cc"}, l));
+    cb.onchange = () => { chip.classList.toggle("on", cb.checked); if (container.id==="gameLangs") buildEastblueUrl(); };
+    container.appendChild(chip);
+  });
+}
+function getChecked(container) {
+  return [...container.querySelectorAll("input:checked")].map(c => c.value);
+}
+function setChecked(container, arr) {
+  const set = new Set(arr);
+  container.querySelectorAll(".chip").forEach(chip => {
+    const cb = chip.querySelector("input");
+    cb.checked = set.has(cb.value); chip.classList.toggle("on", cb.checked);
+  });
+}
+buildLangChips($("gameLangs"), new Set(LANGS));       // step3 默认全选
+buildLangChips($("targetLangs"), new Set(["en"]));    // step4 默认 en
+
+$("langAll3").onclick = () => { setChecked($("gameLangs"), LANGS); buildEastblueUrl(); };
+$("langNone3").onclick = () => { setChecked($("gameLangs"), []); buildEastblueUrl(); };
+$("langAll4").onclick = () => setChecked($("targetLangs"), LANGS);
+$("langNone4").onclick = () => setChecked($("targetLangs"), []);
+[$("cfgGameId"),$("cfgSearchNum"),$("cfgLastAct"),$("cfgServers"),$("cfgExceptInternal")].forEach(el => el.oninput = el.onchange = buildEastblueUrl);
+
+function buildEastblueUrl() {
+  const gid = $("cfgGameId").value || "97";
+  const gl = getChecked($("gameLangs")).join(",");
+  const ei = $("cfgExceptInternal").checked ? "1" : "0";
+  const sn = $("cfgSearchNum").value || "1000";
+  const la = $("cfgLastAct").value;
+  const servers = $("cfgServers").value.trim();
+  let url = "https://eastblue.xinyoudi.com/home/#/player-management?game_id=" + gid +
+    "&attribute_langs=en&game_langs=" + gl + "&except_internal=" + ei +
+    "&search_num=" + sn + "&last_act_time=" + la + "&auto_download=1";
+  if (servers) url += "&server_ids=" + encodeURIComponent(servers);
+  $("dlUrl").textContent = url;
+  return url;
+}
+
+$("btnDownload").onclick = async () => {
+  const btn = $("btnDownload"); const note = $("dlNote");
+  const url = buildEastblueUrl();
+  btn.disabled = true; note.className = "note";
+  btn.textContent = ""; btn.appendChild(h("span",{class:"spinner"})); btn.append("下载中，可能需要在弹出的浏览器登录…");
+  try {
+    const res = await fetch("/api/eastblue", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ url }) }).then(r=>r.json());
+    if (!res.ok) throw new Error(res.error || "下载失败");
+    state.players = res.players || {};
+    const n = Object.keys(state.players).length;
+    note.className = "flash ok"; note.textContent = "已下载 " + n + " 名玩家记录 · " + (res.path||"");
+    toast("玩家表下载完成：" + n + " 条", "ok");
+  } catch (e) {
+    note.className = "flash err"; note.textContent = "下载失败：" + e.message;
+    toast("下载失败", "err");
+  } finally {
+    btn.disabled = false; btn.textContent = "重新下载玩家表";
+  }
+};
+
+/* ═══════════ STEP 5：发奖规则 ═══════════ */
+const RULES = [
+  {v:"top_floors", t:"前 N 楼"},
+  {v:"top_likes", t:"点赞最高 N"},
+  {v:"top_replies", t:"回复最高 N"},
+  {v:"random_pick", t:"随机抽 N"},
+];
+function addAwardRow(preset) {
+  preset = preset || {};
+  const ruleSel = h("select", null, ...RULES.map(r => h("option",{value:r.v},r.t)));
+  ruleSel.value = preset.rule || "top_floors";
+  const nameIn = h("input",{type:"text",value:preset.name||("奖项 "+($("awardList").children.length+1)), placeholder:"奖项名称"});
+  const nIn = h("input",{type:"number",value:preset.n||3});
+  nIn.min = 1;
+  const seedIn = h("input",{type:"number",value:preset.seed!=null?preset.seed:42});
+  const seedWrap = h("div",{class:"seed-wrap"}, h("label",{class:"fld"},"随机种子"), seedIn);
+  const syncSeed = () => seedWrap.classList.toggle("hide", ruleSel.value !== "random_pick");
+  ruleSel.onchange = syncSeed;
+  const row = h("div",{class:"award-row"},
+    h("div",null, h("label",{class:"fld"},"奖项名称"), nameIn),
+    h("div",null, h("label",{class:"fld"},"规则"), ruleSel),
+    h("div",null, h("label",{class:"fld"},"数量 N"), nIn),
+    seedWrap,
+    h("button",{class:"btn-danger rm", onclick:()=>row.remove()}, "删除")
+  );
+  row._get = () => {
+    const a = { name: nameIn.value.trim()||"未命名奖项", rule: ruleSel.value, n: parseInt(nIn.value,10)||1 };
+    if (ruleSel.value === "random_pick") a.seed = parseInt(seedIn.value,10)||0;
+    return a;
+  };
+  $("awardList").appendChild(row);
+  syncSeed();
+}
+$("btnAddAward").onclick = () => addAwardRow();
+addAwardRow({name:"盖楼奖", rule:"top_floors", n:5});   // 初始一行
+
+function collectAwards() { return [...$("awardList").children].map(r => r._get()); }
+
+$("btnProcess").onclick = async () => {
+  if (!state.raw.length) { toast("请先在第 1 步导入留言", "err"); gotoStep(1); return; }
+  const awards = collectAwards();
+  if (!awards.length) { toast("请至少添加一个奖项", "err"); return; }
+  const note = $("procNote"); note.className = "note"; note.textContent = "结算中…";
+  const btn = $("btnProcess"); btn.disabled = true;
+  const payload = {
+    raw_comments: state.raw,
+    players: state.players,
+    dedup_strategy: $("dedupSel").value,
+    target_langs: getChecked($("targetLangs")),
+    awards,
+  };
+  try {
+    const res = await fetch("/api/process", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) }).then(r=>r.json());
+    if (!res.ok) throw new Error(res.error || "结算失败");
+    state.result = res;
+    renderResults(res);
+    $("btnExport").disabled = false;
+    note.className = "flash ok"; note.textContent = "结算完成，可预览各奖项名单并导出。";
+    toast("结算完成", "ok");
+  } catch (e) {
+    note.className = "flash err"; note.textContent = "结算失败：" + e.message;
+    toast("结算失败", "err");
+  } finally { btn.disabled = false; }
+};
+
+const PLAYER_COLS = [
+  ["order","序号"],["player_id","玩家ID"],["role_name","角色名"],["lang","语言"],
+  ["role_level","等级"],["villa","别墅"],["server","服务器"],["total_recharge","充值"],
+  ["last_login","最后登录"],["likes","赞"],["replies","回复"],
+];
+function playerTable(list) {
+  if (!list || !list.length) return h("div",{class:"empty"},"（空）");
+  const head = PLAYER_COLS.map(c => c[1]);
+  const trs = list.map(p => h("tr", null, ...PLAYER_COLS.map(c =>
+    h("td",{class:"mono"}, p[c[0]] != null && p[c[0]] !== "" ? String(p[c[0]]) : "—"))));
+  return tableEl(head, trs);
+}
+function invalidTable(list) {
+  if (!list || !list.length) return h("div",{class:"empty"},"（无无效记录）");
+  const head = ["序号","留言内容","原因"];
+  const trs = list.map(r => h("tr",{class:"bad"},
+    h("td",{class:"mono"}, r.order != null ? r.order : "—"),
+    h("td",{class:"content-cell"}, r.content || "—"),
+    h("td", null, h("span",{class:"pill-no"}, r.reject_reason || "无效"))
+  ));
+  return tableEl(head, trs);
+}
+
+function renderResults(res) {
+  const box = $("results"); clear(box);
+  Object.keys(res.awards).forEach(name => {
+    const list = res.awards[name];
+    box.appendChild(sheet("award","奖项", name, list.length, playerTable(list)));
+  });
+  box.appendChild(sheet("part","参与奖","参与奖（未中奖）", res.participation.length, playerTable(res.participation)));
+  box.appendChild(sheet("inv","无效","无效名单", res.invalid.length, invalidTable(res.invalid)));
+}
+function sheet(kind, badgeTxt, title, cnt, tableNode) {
+  return h("div",{class:"sheet"},
+    h("div",{class:"sheet-head"},
+      h("span",{class:"badge "+kind}, badgeTxt),
+      h("h3",null,title),
+      h("span",{class:"cnt"}, cnt + " 人")),
+    tableNode);
+}
+
+$("btnExport").onclick = async () => {
+  if (!state.result) return;
+  const btn = $("btnExport"); btn.disabled = true;
+  const old = btn.textContent; btn.textContent = ""; btn.appendChild(h("span",{class:"spinner"})); btn.append("导出中…");
+  try {
+    const res = await fetch("/api/export", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({
+      awards: state.result.awards, participation: state.result.participation, invalid: state.result.invalid,
+      filename: "发奖名单.xlsx"
+    }) }).then(r=>r.json());
+    if (!res.ok) throw new Error(res.error || "导出失败");
+    $("procNote").className = "flash ok"; $("procNote").textContent = "已导出：" + res.path;
+    toast("已导出到 " + res.path, "ok");
+  } catch (e) { toast("导出失败：" + e.message, "err"); }
+  finally { btn.disabled = false; btn.textContent = old; }
+};
+
+/* ═══════════ 通用表格 ═══════════ */
+function tableEl(headers, trs) {
+  return h("div",{class:"tbl-wrap"},
+    h("table",null,
+      h("thead",null, h("tr",null, ...headers.map(x => h("th",null,x)))),
+      h("tbody",null, ...(trs.length ? trs : [h("tr",null,h("td",{colspan:headers.length},h("div",{class:"empty"},"（空）")))]))
+    ));
+}
+
+/* ═══════════ 预设：读/写 ═══════════ */
+function currentConfig() {
+  return {
+    dedup_strategy: $("dedupSel").value,
+    eastblue: {
+      game_id: $("cfgGameId").value,
+      game_langs: getChecked($("gameLangs")),
+      except_internal: $("cfgExceptInternal").checked ? 1 : 0,
+      search_num: $("cfgSearchNum").value,
+      last_act_time: $("cfgLastAct").value,
+      server_ids: $("cfgServers").value.trim(),
+    },
+    target_langs: getChecked($("targetLangs")),
+  };
+}
+function applyConfig(cfg) {
+  if (!cfg) return;
+  if (cfg.dedup_strategy) $("dedupSel").value = cfg.dedup_strategy;
+  const eb = cfg.eastblue || {};
+  if (eb.game_id != null) $("cfgGameId").value = eb.game_id;
+  if (eb.search_num != null) $("cfgSearchNum").value = eb.search_num;
+  if (eb.last_act_time) $("cfgLastAct").value = eb.last_act_time;
+  if (eb.server_ids != null) $("cfgServers").value = eb.server_ids;
+  if (eb.except_internal != null) $("cfgExceptInternal").checked = !!eb.except_internal;
+  if (Array.isArray(eb.game_langs)) setChecked($("gameLangs"), eb.game_langs);
+  if (Array.isArray(cfg.target_langs)) setChecked($("targetLangs"), cfg.target_langs);
+  buildEastblueUrl();
+}
+
+let PRESETS = {};
+async function loadPresets(selectDefault) {
+  try {
+    const res = await fetch("/api/presets").then(r=>r.json());
+    PRESETS = res.presets || {};
+    const sel = $("presetSel"); const prev = sel.value;
+    clear(sel); sel.appendChild(h("option",{value:""},"（未选择预设）"));
+    Object.keys(PRESETS).forEach(n => sel.appendChild(h("option",{value:n}, n + (n===res.default ? " · 默认" : ""))));
+    if (selectDefault && res.default && PRESETS[res.default]) {
+      sel.value = res.default; applyConfig(PRESETS[res.default]);
+    } else if (prev && PRESETS[prev]) sel.value = prev;
+  } catch (e) { /* 预设不可用不阻断 */ }
+}
+$("btnLoadPreset").onclick = () => {
+  const n = $("presetSel").value;
+  if (!n || !PRESETS[n]) { toast("请先选择一个预设", "err"); return; }
+  applyConfig(PRESETS[n]); $("presetName").value = n;
+  toast("已载入预设「" + n + "」", "ok");
+};
+$("btnSavePreset").onclick = async () => {
+  const name = $("presetName").value.trim();
+  if (!name) { toast("请填写预设名称", "err"); return; }
+  try {
+    const res = await fetch("/api/presets", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({
+      name, config: currentConfig(), as_default: $("presetDefault").checked
+    }) }).then(r=>r.json());
+    if (!res.ok) throw new Error(res.error||"保存失败");
+    await loadPresets(false); $("presetSel").value = name;
+    toast("预设「" + name + "」已保存", "ok");
+  } catch (e) { toast("保存失败：" + e.message, "err"); }
+};
+
+/* ═══════════ 启动 ═══════════ */
+buildEastblueUrl();
+loadPresets(true);
+</script>
+</body>
+</html>
