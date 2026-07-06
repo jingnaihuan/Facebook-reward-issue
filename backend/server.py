@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """发奖中台本地服务（标准库 http.server，无框架）。"""
-import os, sys, json, uuid, threading, subprocess
+import os, sys, json, uuid, threading, subprocess, tempfile, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -26,13 +26,17 @@ JOBS = {}
 JOBS_LOCK = threading.Lock()
 
 
-def _run_eastblue(job_id, url):
-    """后台线程：跑下载子进程，逐行收集进度，最后解析玩家表并存入 JOBS。"""
+def _run_eastblue(job_id, url, ids):
+    """后台线程：按玩家ID跑下载子进程，逐行收集进度，最后解析玩家表并存入 JOBS。"""
     script = os.path.join(HERE, "reward_hub", "eastblue_download.py")
     result, tail = None, []
+    ids_path = os.path.join(tempfile.gettempdir(), "reward_hub_ids_%s.txt" % job_id)
     try:
+        with open(ids_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(str(i) for i in ids))
         proc = subprocess.Popen(
-            [sys.executable, script, "--url", url, "--outdir", common.work_dir()],
+            [sys.executable, script, "--url", url,
+             "--ids-file", ids_path, "--outdir", common.work_dir()],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
         for line in proc.stdout:
             s = line.strip()
@@ -55,6 +59,11 @@ def _run_eastblue(job_id, url):
         proc.wait()
     except Exception as e:
         result = {"ok": False, "error": str(e)}
+    finally:
+        try:
+            os.remove(ids_path)
+        except OSError:
+            pass
 
     if result is None:
         result = {"ok": False, "error": (tail[-1] if tail else "下载进程无输出")}
@@ -67,6 +76,27 @@ def _run_eastblue(job_id, url):
     with JOBS_LOCK:
         JOBS[job_id]["result"] = result
         JOBS[job_id]["done"] = True
+
+
+def _choose_save_path(default_name):
+    """弹出 macOS 原生「存储」对话框让用户选路径+文件名。
+    返回 (kind, path)：ok=选定路径 / cancel=用户取消 / fallback=无 osascript(非 Mac)。"""
+    safe = default_name.replace('"', "").replace("\\", "")
+    script = ('set theFile to choose file name with prompt "保存发奖名单" default name "%s"\n'
+              "POSIX path of theFile" % safe)
+    try:
+        proc = subprocess.run(["osascript", "-e", script],
+                              capture_output=True, text=True, timeout=300)
+    except FileNotFoundError:
+        return ("fallback", None)
+    except Exception:
+        return ("fallback", None)
+    out = (proc.stdout or "").strip()
+    if proc.returncode == 0 and out:
+        if not out.lower().endswith(".xlsx"):
+            out += ".xlsx"
+        return ("ok", out)
+    return ("cancel", None)          # 用户点了取消，或对话框异常
 
 
 def process_pipeline(raw_comments, players, dedup_strategy, target_langs, awards):
@@ -159,16 +189,26 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": True, **out})
             elif self.path == "/api/export":
                 b = self._body()
-                out_path = os.path.join(common.work_dir(), b.get("filename", "发奖名单.xlsx"))
+                default_name = "发奖名单-%s.xlsx" % datetime.datetime.now().strftime("%Y%m%d")
+                kind, out_path = _choose_save_path(default_name)
+                if kind == "cancel":
+                    self._json({"ok": False, "cancelled": True, "error": "已取消导出"})
+                    return
+                if kind == "fallback":          # 非 Mac / 无原生对话框：落到默认工作区
+                    out_path = os.path.join(common.work_dir(), default_name)
                 export_reward_workbook(out_path, b["awards"], b["participation"], b["invalid"])
                 self._json({"ok": True, "path": out_path})
             elif self.path == "/api/eastblue":
                 b = self._body()
+                ids = b.get("ids") or []
+                if not ids:
+                    self._json({"ok": False, "error": "没有可查询的玩家ID"}, 400)
+                    return
                 job_id = uuid.uuid4().hex
                 with JOBS_LOCK:
                     JOBS[job_id] = {"progress": [], "done": False, "result": None}
                 t = threading.Thread(target=_run_eastblue,
-                                     args=(job_id, b["url"]), daemon=True)
+                                     args=(job_id, b["url"], ids), daemon=True)
                 t.start()
                 self._json({"ok": True, "job": job_id})
             else:

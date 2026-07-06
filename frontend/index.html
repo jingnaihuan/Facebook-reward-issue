@@ -247,6 +247,13 @@
   .stat .n { font-family: var(--mono); font-weight: 700; font-size: 25px; letter-spacing: -.02em; }
   .stat .l { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
   .stat.g .n { color: var(--gold); } .stat.c .n { color: var(--cyan); } .stat.r .n { color: var(--red); } .stat.v .n { color: var(--green); }
+  .stat.clk { cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .1s; }
+  .stat.clk:hover { border-color: var(--border-hi); box-shadow: var(--shadow-md); }
+  .stat.clk:active { transform: translateY(1px); }
+  .stat.clk .l::after { content: " ›"; color: var(--muted-2); }
+  .stat.clk.active { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset, var(--shadow-sm); }
+  .stat.v.clk.active { border-color: var(--green); box-shadow: 0 0 0 1px var(--green) inset, var(--shadow-sm); }
+  .stat.r.clk.active { border-color: var(--red); box-shadow: 0 0 0 1px var(--red) inset, var(--shadow-sm); }
 
   /* ── Award builder ── */
   .award-row {
@@ -521,9 +528,9 @@
       </div>
 
       <div class="stats" style="margin-top:16px;">
-        <div class="stat"><div class="n" id="s2Total">0</div><div class="l">留言总数</div></div>
-        <div class="stat v"><div class="n" id="s2Valid">0</div><div class="l">命中 ID</div></div>
-        <div class="stat r"><div class="n" id="s2Invalid">0</div><div class="l">无有效 ID</div></div>
+        <div class="stat clk" id="s2StatTotal"><div class="n" id="s2Total">0</div><div class="l">留言总数</div></div>
+        <div class="stat v clk" id="s2StatValid"><div class="n" id="s2Valid">0</div><div class="l">命中 ID</div></div>
+        <div class="stat r clk" id="s2StatInvalid"><div class="n" id="s2Invalid">0</div><div class="l">无有效 ID</div></div>
         <div class="stat g"><div class="n" id="s2Uniq">0</div><div class="l">去重后玩家</div></div>
       </div>
 
@@ -566,8 +573,8 @@
 
       <div class="divider"></div>
       <div class="row">
-        <button class="btn-cyan" id="btnDownload">自动下载玩家表</button>
-        <span class="note" id="dlNote">尚未下载。将打开浏览器访问 Eastblue，首次可能需要手动登录。</span>
+        <button class="btn-cyan" id="btnDownload">按玩家ID拉取玩家表</button>
+        <span class="note" id="dlNote">用第 1、2 步提取到的玩家ID，在 Eastblue 按 ID 精确查询（叠加下方筛选）。后台无窗口进行，首次/登录过期才会弹出浏览器。</span>
       </div>
       <div class="callout cyan" style="margin-top:14px;" id="dlUrlBox">
         <b>请求 URL：</b><span id="dlUrl" class="note" style="word-break:break-all;font-family:var(--mono);"></span>
@@ -1051,6 +1058,7 @@ function dedupPreview(rows, strategy) {
   return Object.keys(by).length;
 }
 
+let s2Filter = "all";   // all | valid | invalid：点上方统计卡切换预览范围
 function renderExtractPreview() {
   const rows = state.raw.map(c => ({ ...c, _id: extractId(c.content) }));
   const valid = rows.filter(r => r._id);
@@ -1059,20 +1067,33 @@ function renderExtractPreview() {
   $("s2Valid").textContent = valid.length;
   $("s2Invalid").textContent = invalid.length;
   $("s2Uniq").textContent = dedupPreview(valid, $("dedupSel").value);
+  // 统计卡选中态
+  $("s2StatTotal").classList.toggle("active", s2Filter === "all");
+  $("s2StatValid").classList.toggle("active", s2Filter === "valid");
+  $("s2StatInvalid").classList.toggle("active", s2Filter === "invalid");
 
   const box = $("s2Preview"); clear(box);
   if (!rows.length) { box.appendChild(h("div",{class:"empty"},"请先在第 1 步导入留言")); return; }
+  const shown = s2Filter === "valid" ? valid : s2Filter === "invalid" ? invalid : rows;
+  const label = s2Filter === "valid" ? "仅命中 ID" : s2Filter === "invalid" ? "仅无有效 ID" : "全部留言";
+  box.appendChild(h("div",{class:"note",style:"margin-top:16px;"},
+    "当前预览：" + label + " · 共 " + shown.length + " 条" +
+    (shown.length > 300 ? "（只显示前 300 条）" : "") + " · 点上方「命中 ID / 无有效 ID / 留言总数」切换"));
+  if (!shown.length) { box.appendChild(h("div",{class:"empty"},"（该筛选下没有留言）")); return; }
   const head = ["状态","提取 ID","序号","留言内容","按赞"];
-  const trs = rows.slice(0, 300).map(r => h("tr", { class: r._id ? "ok" : "bad" },
+  const trs = shown.slice(0, 300).map(r => h("tr", { class: r._id ? "ok" : "bad" },
     h("td", null, r._id ? h("span",{class:"pill-id"},"命中") : h("span",{class:"pill-no"},"无 ID")),
     h("td", {class:"mono"}, r._id || "—"),
     h("td", {class:"mono"}, r.order),
     h("td", {class:"content-cell"}, r.content),
     h("td", {class:"mono"}, r.likes)
   ));
-  box.appendChild(h("div",{class:"note",style:"margin-top:16px;"}, "预览前 " + Math.min(300,rows.length) + " 条 · 去重策略实时反映在上方统计"));
   box.appendChild(tableEl(head, trs));
 }
+function setS2Filter(f) { s2Filter = (s2Filter === f) ? "all" : f; renderExtractPreview(); }
+$("s2StatTotal").onclick = () => setS2Filter("all");
+$("s2StatValid").onclick = () => setS2Filter("valid");
+$("s2StatInvalid").onclick = () => setS2Filter("invalid");
 $("dedupSel").onchange = renderExtractPreview;
 
 /* ═══════════ STEP 3/4：语种 chips + Eastblue URL ═══════════ */
@@ -1105,6 +1126,14 @@ $("langAll4").onclick = () => setChecked($("targetLangs"), LANGS);
 $("langNone4").onclick = () => setChecked($("targetLangs"), []);
 [$("cfgGameId"),$("cfgSearchNum"),$("cfgLastAct"),$("cfgServers"),$("cfgExceptInternal")].forEach(el => el.oninput = el.onchange = buildEastblueUrl);
 
+// 「排除内玩」chip 的选中态：CSS 藏了原生 checkbox，需手动同步 .on 类才有视觉反馈
+function syncEiChip() {
+  const chip = $("cfgExceptInternal").closest(".chip");
+  if (chip) chip.classList.toggle("on", $("cfgExceptInternal").checked);
+}
+$("cfgExceptInternal").addEventListener("change", syncEiChip);
+syncEiChip();
+
 function buildEastblueUrl() {
   const gid = $("cfgGameId").value || "97";
   const gl = getChecked($("gameLangs")).join(",");
@@ -1114,10 +1143,17 @@ function buildEastblueUrl() {
   const servers = $("cfgServers").value.trim();
   let url = "https://eastblue.xinyoudi.com/home/#/player-management?game_id=" + gid +
     "&attribute_langs=en&game_langs=" + gl + "&except_internal=" + ei +
-    "&search_num=" + sn + "&last_act_time=" + la + "&auto_download=1";
+    "&search_num=" + sn + "&last_act_time=" + la;
   if (servers) url += "&server_ids=" + encodeURIComponent(servers);
   $("dlUrl").textContent = url;
   return url;
+}
+
+// 从留言里提取的、去重后的全部玩家ID（用于按ID精确查询）
+function collectPlayerIds() {
+  const seen = new Set();
+  state.raw.forEach(c => { const id = extractId(c.content); if (id) seen.add(id); });
+  return [...seen];
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -1133,14 +1169,21 @@ function renderDlProgress(lines, running) {
 $("btnDownload").onclick = async () => {
   const btn = $("btnDownload"); const note = $("dlNote");
   const url = buildEastblueUrl();
+  const ids = collectPlayerIds();
+  if (!ids.length) {
+    note.className = "flash err";
+    note.textContent = "没有可查询的玩家ID，请先在第 1、2 步导入/抓取留言并确认有命中 ID。";
+    toast("没有可查询的玩家ID", "err");
+    return;
+  }
   // 重置：任何一次下载开始都先视作未完成，挡住下一步
   state.step3done = false; state.players = {};
   $("s3Next").disabled = true; refreshRail();
   btn.disabled = true; note.className = "note"; note.textContent = "";
-  btn.textContent = ""; btn.appendChild(h("span",{class:"spinner"})); btn.append("下载中…");
-  renderDlProgress(["正在启动下载…"], true);
+  btn.textContent = ""; btn.appendChild(h("span",{class:"spinner"})); btn.append("拉取中…");
+  renderDlProgress(["正在按 " + ids.length + " 个玩家ID 启动查询…"], true);
   try {
-    const start = await fetch("/api/eastblue", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ url }) }).then(r=>r.json());
+    const start = await fetch("/api/eastblue", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ url, ids }) }).then(r=>r.json());
     if (!start.ok || !start.job) throw new Error(start.error || "无法启动下载任务");
     let res = null;
     while (true) {
@@ -1150,20 +1193,23 @@ $("btnDownload").onclick = async () => {
       renderDlProgress(st.progress || [], !st.done);
       if (st.done) { res = st.result; break; }
     }
-    if (!res || !res.ok) throw new Error((res && res.error) || "下载失败");
+    if (!res || !res.ok) throw new Error((res && res.error) || "拉取失败");
     state.players = res.players || {};
     state.step3done = true;
     const n = Object.keys(state.players).length;
-    note.className = "flash ok"; note.textContent = "已下载 " + n + " 名玩家记录 · " + (res.path||"");
+    note.className = "flash ok";
+    note.textContent = "命中 " + n + " / 共查询 " + ids.length + " 个玩家ID" +
+      (n < ids.length ? "（" + (ids.length - n) + " 个在筛选条件下无记录，会进无效名单）" : "") +
+      " · " + (res.path || "");
     $("s3Next").disabled = false; refreshRail();
-    toast("玩家表下载完成：" + n + " 条", "ok");
+    toast("拉取完成：命中 " + n + "/" + ids.length, "ok");
   } catch (e) {
     state.step3done = false; state.players = {};
-    note.className = "flash err"; note.textContent = "下载失败：" + e.message;
+    note.className = "flash err"; note.textContent = "拉取失败：" + e.message;
     $("s3Next").disabled = true; refreshRail();
-    toast("下载失败", "err");
+    toast("拉取失败", "err");
   } finally {
-    btn.disabled = false; btn.textContent = "重新下载玩家表";
+    btn.disabled = false; btn.textContent = "重新拉取玩家表";
   }
 };
 
@@ -1276,13 +1322,15 @@ function sheet(kind, badgeTxt, title, cnt, tableNode) {
 $("btnExport").onclick = async () => {
   if (!state.result) return;
   const btn = $("btnExport"); btn.disabled = true;
-  const old = btn.textContent; btn.textContent = ""; btn.appendChild(h("span",{class:"spinner"})); btn.append("导出中…");
+  const old = btn.textContent; btn.textContent = ""; btn.appendChild(h("span",{class:"spinner"})); btn.append("请在弹出的窗口选择保存位置…");
   try {
     const res = await fetch("/api/export", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({
-      awards: state.result.awards, participation: state.result.participation, invalid: state.result.invalid,
-      filename: "发奖名单.xlsx"
+      awards: state.result.awards, participation: state.result.participation, invalid: state.result.invalid
     }) }).then(r=>r.json());
-    if (!res.ok) throw new Error(res.error || "导出失败");
+    if (!res.ok) {
+      if (res.cancelled) { toast("已取消导出"); return; }
+      throw new Error(res.error || "导出失败");
+    }
     $("procNote").className = "flash ok"; $("procNote").textContent = "已导出：" + res.path;
     toast("已导出到 " + res.path, "ok");
   } catch (e) { toast("导出失败：" + e.message, "err"); }
@@ -1321,7 +1369,7 @@ function applyConfig(cfg) {
   if (eb.search_num != null) $("cfgSearchNum").value = eb.search_num;
   if (eb.last_act_time) $("cfgLastAct").value = eb.last_act_time;
   if (eb.server_ids != null) $("cfgServers").value = eb.server_ids;
-  if (eb.except_internal != null) $("cfgExceptInternal").checked = !!eb.except_internal;
+  if (eb.except_internal != null) { $("cfgExceptInternal").checked = !!eb.except_internal; syncEiChip(); }
   if (Array.isArray(eb.game_langs)) setChecked($("gameLangs"), eb.game_langs);
   if (Array.isArray(cfg.target_langs)) setChecked($("targetLangs"), cfg.target_langs);
   buildEastblueUrl();

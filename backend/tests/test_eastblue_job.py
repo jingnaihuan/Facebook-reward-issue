@@ -35,7 +35,7 @@ def test_job_collects_progress_and_parses_players(tmp_path, monkeypatch):
 
     job_id = "job_test"
     server.JOBS[job_id] = {"progress": [], "done": False, "result": None}
-    server._run_eastblue(job_id, "http://example/download")
+    server._run_eastblue(job_id, "http://example/download", ["1052837435"])
 
     job = server.JOBS[job_id]
     assert job["done"] is True
@@ -50,7 +50,7 @@ def test_job_reports_failure(tmp_path, monkeypatch):
 
     job_id = "job_fail"
     server.JOBS[job_id] = {"progress": [], "done": False, "result": None}
-    server._run_eastblue(job_id, "http://example/download")
+    server._run_eastblue(job_id, "http://example/download", ["1052837435"])
 
     job = server.JOBS[job_id]
     assert job["done"] is True
