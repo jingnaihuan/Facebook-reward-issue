@@ -92,6 +92,39 @@
   .preset-bar .tag svg { width: 15px; height: 15px; }
   .preset-bar .spacer { flex: 1; min-width: 8px; }
 
+  /* ── 配置详情面板 ── */
+  .cfg-view {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 15px 18px; margin: -8px 0 22px; box-shadow: var(--shadow-sm);
+  }
+  .cfg-view-head { font-size: 12px; font-weight: 600; color: var(--gold); margin-bottom: 12px; letter-spacing: .02em; }
+  .cfg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 22px; }
+  .cfg-item { display: flex; align-items: baseline; gap: 10px; font-size: 13px; padding: 5px 0; border-bottom: 1px dashed var(--border); }
+  .cfg-item .ck { color: var(--muted); flex: 0 0 76px; }
+  .cfg-item .cv { color: var(--text); font-weight: 500; word-break: break-all; }
+
+  /* ── 下载进度 ── */
+  .dl-progress { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .dlp-row { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--muted); padding: 3px 2px; }
+  .dlp-row.cur { color: var(--text); font-weight: 500; }
+  .dlp-row .spinner { width: 12px; height: 12px; margin: 0 1px; border-color: var(--border-hi); border-top-color: var(--gold); }
+  .dlp-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex: 0 0 auto; margin: 0 3px; }
+
+  /* ── 帮助 / 折叠说明 ── */
+  .help { border: 1px solid var(--border); border-radius: 12px; background: var(--panel-2); margin: 12px 0 4px; overflow: hidden; }
+  .help > summary { cursor: pointer; list-style: none; padding: 11px 15px; font-size: 13px; font-weight: 600; color: var(--gold); display: flex; align-items: center; gap: 8px; user-select: none; }
+  .help > summary::-webkit-details-marker { display: none; }
+  .help > summary::before { content: "▸"; color: var(--muted); transition: transform .18s ease; }
+  .help[open] > summary::before { transform: rotate(90deg); }
+  .help > summary:hover { color: var(--gold-hi); }
+  .help .help-body { padding: 6px 18px 16px; border-top: 1px solid var(--border); font-size: 13px; line-height: 1.75; color: var(--text); }
+  .help .help-body p { margin: 6px 0; }
+  .help .help-body h4 { font-size: 12.5px; color: var(--gold); margin: 15px 0 5px; letter-spacing: .02em; }
+  .help .help-body ol, .help .help-body ul { margin: 4px 0 4px 20px; }
+  .help .help-body li { margin: 4px 0; }
+  .help .val { font-family: var(--mono); font-size: 12px; background: var(--panel-3); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; color: var(--text); overflow-wrap: anywhere; word-break: break-word; }
+  .help .warn { color: var(--red); }
+
   /* ── Stepper rail ── */
   .rail { display: flex; gap: 6px; margin-bottom: 26px; overflow-x: auto; padding-bottom: 4px; }
   .rail .node {
@@ -307,16 +340,18 @@
     </span>
     <select id="presetSel" class="compact"><option value="">（未选择预设）</option></select>
     <button class="btn-ghost btn-sm" id="btnLoadPreset">载入</button>
+    <button class="btn-ghost btn-sm" id="btnViewCfg">查看配置</button>
     <div class="spacer"></div>
     <input type="text" id="presetName" placeholder="预设名称" style="width:auto;min-width:150px;flex:0 1 auto;" />
     <label class="note" style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;"><input type="checkbox" id="presetDefault" style="width:auto;" /> 设为默认</label>
     <button class="btn-primary btn-sm" id="btnSavePreset">保存当前配置</button>
   </div>
+  <div id="cfgView" class="cfg-view" style="display:none;"></div>
 
   <!-- Stepper rail -->
   <nav class="rail" id="rail">
-    <div class="node active" data-step="1"><div class="rn"><b><span>1</span></b> STEP 01</div><div class="rt">抓取留言</div><div class="rd">导入 / 粘贴</div></div>
-    <div class="node" data-step="2"><div class="rn"><b><span>2</span></b> STEP 02</div><div class="rt">清洗提取 ID</div><div class="rd">正则预览 · 去重</div></div>
+    <div class="node active" data-step="1"><div class="rn"><b><span>1</span></b> STEP 01</div><div class="rt">抓取留言</div><div class="rd">抓取 / 导入</div></div>
+    <div class="node" data-step="2"><div class="rn"><b><span>2</span></b> STEP 02</div><div class="rt">清洗提取 ID</div><div class="rd">提取 ID · 去重</div></div>
     <div class="node" data-step="3"><div class="rn"><b><span>3</span></b> STEP 03</div><div class="rt">拉取玩家信息</div><div class="rd">Eastblue 下载</div></div>
     <div class="node" data-step="4"><div class="rn"><b><span>4</span></b> STEP 04</div><div class="rt">语言筛选</div><div class="rd">目标语种</div></div>
     <div class="node" data-step="5"><div class="rn"><b><span>5</span></b> STEP 05</div><div class="rt">发奖 + 导出</div><div class="rd">规则 · 结算</div></div>
@@ -325,14 +360,14 @@
   <!-- ══════════ STEP 1 ══════════ -->
   <section class="step active" data-step="1">
     <div class="card">
-      <div class="step-head"><span class="no">STEP 01</span><h2>抓取留言</h2><span class="hint">导入 CSV、粘贴文本，或直接从 Facebook 抓取</span></div>
+      <div class="step-head"><span class="no">STEP 01</span><h2>抓取留言</h2><span class="hint">直接从 Facebook 抓取，或导入 CSV / 粘贴文本</span></div>
       <div class="tabs">
-        <button id="tabFile" class="active">导入文件</button>
+        <button id="tabScrape" class="active">直接抓取</button>
+        <button id="tabFile">导入文件</button>
         <button id="tabPaste">粘贴文本</button>
-        <button id="tabScrape">直接抓取</button>
       </div>
 
-      <div id="modeFile">
+      <div id="modeFile" style="display:none;">
         <div class="drop" id="drop">
           <div class="big">点击选择 CSV 文件，或拖拽到此处</div>
           <div class="sm">列顺序：序号 · 留言内容 · 按赞数 · 留言时间（回复数默认 0）。首行如为表头会自动跳过。</div>
@@ -349,9 +384,9 @@
         </div>
       </div>
 
-      <div id="modeScrape" style="display:none;">
+      <div id="modeScrape">
         <!-- 登录授权 -->
-        <label class="fld" style="margin-bottom:12px;">二选一登录：<b>方式 A</b> 用 Facebook 授权（需 App ID）或 <b>方式 B</b> 直接粘贴 Access Token。抓取直连 <code style="font-family:var(--mono)">graph.facebook.com</code>，Token 只留在本机内存。</label>
+        <label class="fld" style="margin-bottom:12px;">二选一登录：<b>方式 A</b> 用 Facebook 授权（需 App ID，过期后点一下即可续期，推荐）或 <b>方式 B</b> 直接粘贴 Access Token。抓取直连官方 <code style="font-family:var(--mono)">graph.facebook.com</code>，Token 只留在本机内存、不会上传。</label>
 
         <div class="grid c2" style="align-items:end;margin-bottom:14px;">
           <div>
@@ -369,6 +404,49 @@
             </div>
           </div>
         </div>
+        <div class="note" style="margin:-6px 0 4px;">首次用方式 A 需在 App 后台做一次性设置，并用 <b>http://localhost:8765</b> 打开本页（不要用 127.0.0.1，否则 FB 登录会被拦）。</div>
+
+        <details class="help">
+          <summary>方式 A 首次设置指南（点开看看要配哪些）</summary>
+          <div class="help-body">
+            <p><b>最关键：</b>用 <span class="val">http://localhost:8765</span> 打开本页，<b class="warn">不要用 127.0.0.1</b>——FB 的应用域名不接受 IP，用 IP 一定登录失败。双击「启动.command」现已自动用 localhost。</p>
+
+            <p>以下在 <b>developers.facebook.com → 你的 App</b> 里设置（一次性）：</p>
+
+            <h4>① 设置 → 基本 (Settings · Basic)</h4>
+            <ul>
+              <li>应用域名 (App Domains)：填 <span class="val">localhost</span></li>
+              <li>底部「+ 添加平台」→ 选「网站」→ 站点网址 <span class="val">http://localhost:8765/</span></li>
+            </ul>
+
+            <h4>② 产品加「Facebook 登录」→ 设置</h4>
+            <ul>
+              <li>使用 JavaScript SDK 登录 = <b>是</b></li>
+              <li>JavaScript SDK 允许域名：<span class="val">http://localhost:8765</span></li>
+              <li>客户端 / 网页 OAuth 登录 = <b>是</b></li>
+              <li>有效 OAuth 重定向 URI：<span class="val">http://localhost:8765/</span>（可选，填上更稳）</li>
+            </ul>
+
+            <h4>③ 应用模式 / 角色</h4>
+            <ul>
+              <li>开发模式即可（你是管理员可直接用）。</li>
+              <li>让同事也用：把他们加为 App 的「测试人员 / 开发者」；或把 App 上线（上线需对 <span class="val">pages_read_user_content</span> 等做 App Review + 商家验证）。</li>
+            </ul>
+
+            <h4>④ 权限</h4>
+            <p>已申请 <span class="val">pages_show_list</span> <span class="val">pages_read_engagement</span> <span class="val">pages_read_user_content</span>。开发模式 + 管理员 + 只读自管粉专 → 属标准访问，无需审核。</p>
+
+            <h4>使用流程</h4>
+            <ol>
+              <li>填 App ID → 点「初始化」</li>
+              <li>点「用 Facebook 登录」→ 授权（弹窗被浏览器拦的话点允许）</li>
+              <li>选粉专 → 载入贴文 / 填贴文 ID → 抓取</li>
+            </ol>
+
+            <h4>Token 过期了怎么办</h4>
+            <p>方式 A 的 Token 也是短效（约 1–2 小时），但过期后<b>再点一次「用 Facebook 登录」</b>即可——浏览器留着 FB 会话，通常一键续期、免重新授权。这就是它比方式 B 省事的地方。</p>
+          </div>
+        </details>
 
         <div class="divider"></div>
 
@@ -378,7 +456,7 @@
             <input type="text" id="fbToken" placeholder="EAAB… 粘贴在这里" style="flex:1;min-width:0;" />
             <button class="btn-ghost btn-sm" id="fbBtnUseToken">使用此 Token</button>
           </div>
-          <div class="note" style="margin-top:8px;">到 <b>Graph API Explorer</b> 勾选 <code style="font-family:var(--mono)">pages_show_list</code>、<code style="font-family:var(--mono)">pages_read_engagement</code>、<code style="font-family:var(--mono)">pages_read_user_content</code>，生成后切成「Page Access Token」选你的粉专再复制。</div>
+          <div class="note" style="margin-top:8px;">到 <b>Graph API Explorer</b> 勾选 <code style="font-family:var(--mono)">pages_show_list</code>、<code style="font-family:var(--mono)">pages_read_engagement</code>、<code style="font-family:var(--mono)">pages_read_user_content</code>，生成后切成「Page Access Token」选你的粉专再复制。建议换成<b>长效 Token</b>（约 60 天）省得频繁重新生成。</div>
         </div>
 
         <div class="flash" id="fbLoginNote" style="margin-top:6px;"></div>
@@ -426,7 +504,7 @@
   <!-- ══════════ STEP 2 ══════════ -->
   <section class="step" data-step="2">
     <div class="card">
-      <div class="step-head"><span class="no">STEP 02</span><h2>清洗提取 ID</h2><span class="hint">正则 <code>(1\d{9})</code> · 绿=命中 红=无效</span></div>
+      <div class="step-head"><span class="no">STEP 02</span><h2>清洗提取 ID</h2><span class="hint">提取有效 ID · 绿=命中 红=无效</span></div>
 
       <div class="grid c2" style="align-items:end;margin-bottom:6px;">
         <div>
@@ -494,10 +572,11 @@
       <div class="callout cyan" style="margin-top:14px;" id="dlUrlBox">
         <b>请求 URL：</b><span id="dlUrl" class="note" style="word-break:break-all;font-family:var(--mono);"></span>
       </div>
+      <div id="dlProgress" class="dl-progress" style="display:none;"></div>
 
       <div class="nav-row">
         <button class="btn-ghost" data-goto="2">← 返回</button>
-        <button class="btn-primary" data-goto="4">下一步 · 语言筛选 →</button>
+        <button class="btn-primary" id="s3Next" data-goto="4" disabled>下一步 · 语言筛选 →</button>
       </div>
     </div>
   </section>
@@ -541,7 +620,7 @@
     </div>
   </section>
 
-  <footer>本机运行 · 数据不出本地 · 127.0.0.1:8765</footer>
+  <footer>本机运行 · 数据不出本地 · localhost:8765</footer>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -576,6 +655,7 @@ const state = {
   raw: [],          // raw_comments: {order,content,likes,replies,time}
   players: {},      // {id: {...}}
   result: null,     // /api/process 返回
+  step3done: false, // 玩家表是否已成功下载（失败则挡住后续步骤）
 };
 
 /* ═══════════ Toast ═══════════ */
@@ -594,16 +674,30 @@ fetch("/api/ping").then(r=>r.json()).then(d=>{
 
 /* ═══════════ 步骤导航 ═══════════ */
 let curStep = 1;
-function gotoStep(n) {
-  curStep = n;
-  document.querySelectorAll(".step").forEach(s => s.classList.toggle("active", +s.dataset.step === n));
+// 进入某步的前置条件（任一步失败/未完成都挡住后续）
+function canEnter(n) {
+  if (n >= 2 && state.raw.length === 0) return "请先在第 1 步导入或抓取留言";
+  if (n >= 4 && !state.step3done) return "请先在第 3 步成功下载玩家表";
+  return null;
+}
+// 更新导航灯：已走过且前置满足的步骤显示绿勾（失败步骤不亮）
+function refreshRail() {
   document.querySelectorAll(".rail .node").forEach(nd => {
     const s = +nd.dataset.step;
-    nd.classList.toggle("active", s === n);
-    nd.classList.toggle("done", s < n);
+    nd.classList.toggle("active", s === curStep);
+    nd.classList.toggle("done", s < curStep);
   });
+}
+function gotoStep(n) {
+  if (n > curStep) {
+    const block = canEnter(n);
+    if (block) { toast(block, "err"); return; }
+  }
+  curStep = n;
+  document.querySelectorAll(".step").forEach(s => s.classList.toggle("active", +s.dataset.step === n));
+  refreshRail();
   if (n === 2) renderExtractPreview();
-  if (n === 3) buildEastblueUrl();
+  if (n === 3) { buildEastblueUrl(); $("s3Next").disabled = !state.step3done; }
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 document.querySelectorAll(".rail .node").forEach(nd => nd.onclick = () => gotoStep(+nd.dataset.step));
@@ -778,7 +872,7 @@ $("fbBtnLogin").onclick = () => {
   if (!window.FB) { toast("请先初始化 App ID", "err"); return; }
   FB.login(r => {
     if (r.status === "connected") { FB_TOKEN = r.authResponse.accessToken; fbOnConnected("user"); }
-    else fbNote("未完成授权", "err");
+    else fbNote("未完成授权（可能是弹窗被拦或未同意授权）", "err");
   }, { scope: "pages_show_list,pages_read_engagement,pages_read_user_content", auth_type: "rerequest", return_scopes: true });
 };
 
@@ -942,7 +1036,7 @@ $("fbBtnFetch").onclick = async () => {
 try { const savedAppId = localStorage.getItem("rh_fb_app_id"); if (savedAppId) $("fbAppId").value = savedAppId; } catch(e){}
 
 /* ═══════════ STEP 2：清洗提取 ID 预览 ═══════════ */
-function extractId(text) { const m = ID_RE.exec(String(text||"")); return m ? m[1] : null; }
+function extractId(text) { const m2 = ID_RE.exec(String(text||"")); return m2 ? m2[1] : null; }
 
 function dedupPreview(rows, strategy) {
   // 复刻后端 dedup：earliest=按order最小 / best_likes=按likes最高 / all=全部
@@ -1026,20 +1120,47 @@ function buildEastblueUrl() {
   return url;
 }
 
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function renderDlProgress(lines, running) {
+  const box = $("dlProgress"); box.style.display = "block"; clear(box);
+  (lines.length ? lines : ["正在启动下载…"]).forEach((ln, i) => {
+    const last = i === lines.length - 1;
+    box.appendChild(h("div", { class: "dlp-row" + (last && running ? " cur" : "") },
+      (last && running) ? h("span", { class: "spinner" }) : h("span", { class: "dlp-dot" }),
+      h("span", null, ln)));
+  });
+}
 $("btnDownload").onclick = async () => {
   const btn = $("btnDownload"); const note = $("dlNote");
   const url = buildEastblueUrl();
-  btn.disabled = true; note.className = "note";
-  btn.textContent = ""; btn.appendChild(h("span",{class:"spinner"})); btn.append("下载中，可能需要在弹出的浏览器登录…");
+  // 重置：任何一次下载开始都先视作未完成，挡住下一步
+  state.step3done = false; state.players = {};
+  $("s3Next").disabled = true; refreshRail();
+  btn.disabled = true; note.className = "note"; note.textContent = "";
+  btn.textContent = ""; btn.appendChild(h("span",{class:"spinner"})); btn.append("下载中…");
+  renderDlProgress(["正在启动下载…"], true);
   try {
-    const res = await fetch("/api/eastblue", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ url }) }).then(r=>r.json());
-    if (!res.ok) throw new Error(res.error || "下载失败");
+    const start = await fetch("/api/eastblue", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ url }) }).then(r=>r.json());
+    if (!start.ok || !start.job) throw new Error(start.error || "无法启动下载任务");
+    let res = null;
+    while (true) {
+      await sleep(700);
+      const st = await fetch("/api/eastblue/status?job=" + encodeURIComponent(start.job)).then(r=>r.json());
+      if (!st.ok) throw new Error(st.error || "任务状态异常");
+      renderDlProgress(st.progress || [], !st.done);
+      if (st.done) { res = st.result; break; }
+    }
+    if (!res || !res.ok) throw new Error((res && res.error) || "下载失败");
     state.players = res.players || {};
+    state.step3done = true;
     const n = Object.keys(state.players).length;
     note.className = "flash ok"; note.textContent = "已下载 " + n + " 名玩家记录 · " + (res.path||"");
+    $("s3Next").disabled = false; refreshRail();
     toast("玩家表下载完成：" + n + " 条", "ok");
   } catch (e) {
+    state.step3done = false; state.players = {};
     note.className = "flash err"; note.textContent = "下载失败：" + e.message;
+    $("s3Next").disabled = true; refreshRail();
     toast("下载失败", "err");
   } finally {
     btn.disabled = false; btn.textContent = "重新下载玩家表";
@@ -1206,6 +1327,37 @@ function applyConfig(cfg) {
   buildEastblueUrl();
 }
 
+/* ═══════════ 配置可视化 ═══════════ */
+const DEDUP_NAMES = { earliest:"最早一条", all:"全部保留", best_likes:"点赞最高一条" };
+const LASTACT_NAMES = { last_one_year:"最近一年", last_two_year:"最近两年", last_three_year:"最近三年" };
+function langLabels(arr) {
+  return (arr && arr.length) ? arr.map(l => (LANG_NAMES[l] || l) + "(" + l + ")").join("、") : "（未选）";
+}
+function renderConfigView(cfg, title) {
+  const box = $("cfgView"); box.style.display = "block"; clear(box);
+  cfg = cfg || {}; const eb = cfg.eastblue || {};
+  const rows = [
+    ["去重策略", DEDUP_NAMES[cfg.dedup_strategy] || cfg.dedup_strategy || "—"],
+    ["游戏 ID", eb.game_id != null && eb.game_id !== "" ? eb.game_id : "—"],
+    ["拉取上限", eb.search_num != null && eb.search_num !== "" ? eb.search_num : "—"],
+    ["活跃时间", LASTACT_NAMES[eb.last_act_time] || eb.last_act_time || "—"],
+    ["游戏语种", langLabels(eb.game_langs)],
+    ["排除内玩", eb.except_internal ? "是" : "否"],
+    ["服务器", (eb.server_ids && String(eb.server_ids).trim()) || "全部"],
+    ["目标语种", langLabels(cfg.target_langs)],
+  ];
+  box.appendChild(h("div", { class:"cfg-view-head" }, title || "当前配置"));
+  const grid = h("div", { class:"cfg-grid" });
+  rows.forEach(([k, v]) => grid.appendChild(
+    h("div", { class:"cfg-item" }, h("span", { class:"ck" }, k), h("span", { class:"cv" }, String(v)))));
+  box.appendChild(grid);
+}
+$("btnViewCfg").onclick = () => {
+  const box = $("cfgView");
+  if (box.style.display === "none" || !box.style.display) renderConfigView(currentConfig(), "当前配置");
+  else box.style.display = "none";
+};
+
 let PRESETS = {};
 async function loadPresets(selectDefault) {
   try {
@@ -1223,6 +1375,7 @@ $("btnLoadPreset").onclick = () => {
   const n = $("presetSel").value;
   if (!n || !PRESETS[n]) { toast("请先选择一个预设", "err"); return; }
   applyConfig(PRESETS[n]); $("presetName").value = n;
+  renderConfigView(PRESETS[n], "已载入预设「" + n + "」的配置");
   toast("已载入预设「" + n + "」", "ok");
 };
 $("btnSavePreset").onclick = async () => {
@@ -1234,6 +1387,7 @@ $("btnSavePreset").onclick = async () => {
     }) }).then(r=>r.json());
     if (!res.ok) throw new Error(res.error||"保存失败");
     await loadPresets(false); $("presetSel").value = name;
+    renderConfigView(currentConfig(), "已保存预设「" + name + "」的配置");
     toast("预设「" + name + "」已保存", "ok");
   } catch (e) { toast("保存失败：" + e.message, "err"); }
 };

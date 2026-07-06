@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """发奖中台本地服务（标准库 http.server，无框架）。"""
-import os, sys, json
+import os, sys, json, uuid, threading, subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse, parse_qs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -18,6 +19,54 @@ ROOT = os.path.dirname(HERE)
 FRONTEND = os.path.join(ROOT, "frontend")
 PRESETS = os.path.join(common.app_data_dir(), "presets.json")
 PORT = 8765
+
+
+# ── Eastblue 下载任务（后台线程 + 进度轮询）─────────────────────────
+JOBS = {}
+JOBS_LOCK = threading.Lock()
+
+
+def _run_eastblue(job_id, url):
+    """后台线程：跑下载子进程，逐行收集进度，最后解析玩家表并存入 JOBS。"""
+    script = os.path.join(HERE, "reward_hub", "eastblue_download.py")
+    result, tail = None, []
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, script, "--url", url, "--outdir", common.work_dir()],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        for line in proc.stdout:
+            s = line.strip()
+            if not s:
+                continue
+            msg = None
+            if s.startswith("{"):
+                try:
+                    msg = json.loads(s)
+                except Exception:
+                    msg = None
+            if msg is None:
+                tail.append(s); del tail[:-5]           # 保留末尾几行以便报错
+                continue
+            if "progress" in msg:
+                with JOBS_LOCK:
+                    JOBS[job_id]["progress"].append(msg["progress"])
+            elif "ok" in msg:
+                result = msg
+        proc.wait()
+    except Exception as e:
+        result = {"ok": False, "error": str(e)}
+
+    if result is None:
+        result = {"ok": False, "error": (tail[-1] if tail else "下载进程无输出")}
+    if result.get("ok"):
+        try:
+            from reward_hub.eastblue_parse import parse_players
+            result["players"] = parse_players(result["path"])
+        except Exception as e:
+            result = {"ok": False, "error": "解析玩家表失败：%s" % e}
+    with JOBS_LOCK:
+        JOBS[job_id]["result"] = result
+        JOBS[job_id]["done"] = True
 
 
 def process_pipeline(raw_comments, players, dedup_strategy, target_langs, awards):
@@ -50,7 +99,7 @@ def process_pipeline(raw_comments, players, dedup_strategy, target_langs, awards
 
 class Handler(BaseHTTPRequestHandler):
     def _json(self, obj, code=200):
-        body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        body = json.dumps(obj, ensure_ascii=False, default=str).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -79,6 +128,16 @@ class Handler(BaseHTTPRequestHandler):
             store = ConfigStore(PRESETS)
             self._json({"default": store.get_default(),
                         "presets": {n: store.load_preset(n) for n in store.list_presets()}})
+        elif self.path.startswith("/api/eastblue/status"):
+            job_id = (parse_qs(urlparse(self.path).query).get("job") or [""])[0]
+            with JOBS_LOCK:
+                job = JOBS.get(job_id)
+                if not job:
+                    self._json({"ok": False, "error": "任务不存在"}, 404)
+                    return
+                self._json({"ok": True, "done": job["done"],
+                            "progress": list(job["progress"]),
+                            "result": job["result"]})
         else:
             self._json({"ok": False, "error": "not found"}, 404)
 
@@ -105,18 +164,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": True, "path": out_path})
             elif self.path == "/api/eastblue":
                 b = self._body()
-                import subprocess
-                script = os.path.join(HERE, "reward_hub", "eastblue_download.py")
-                proc = subprocess.run(
-                    [sys.executable, script, "--url", b["url"],
-                     "--outdir", common.work_dir()],
-                    capture_output=True, text=True, timeout=180)
-                line = (proc.stdout or "").strip().splitlines()[-1] if proc.stdout else "{}"
-                res = json.loads(line)
-                if res.get("ok"):
-                    from reward_hub.eastblue_parse import parse_players
-                    res["players"] = parse_players(res["path"])
-                self._json(res)
+                job_id = uuid.uuid4().hex
+                with JOBS_LOCK:
+                    JOBS[job_id] = {"progress": [], "done": False, "result": None}
+                t = threading.Thread(target=_run_eastblue,
+                                     args=(job_id, b["url"]), daemon=True)
+                t.start()
+                self._json({"ok": True, "job": job_id})
             else:
                 self._json({"ok": False, "error": "not found"}, 404)
         except Exception as e:
