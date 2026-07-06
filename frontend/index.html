@@ -38,6 +38,9 @@
        避免 Windows 上中文落到默认宋体(SimSun)、跟正文微软雅黑不一致。 */
     --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, "Cascadia Code", "PingFang SC", "Microsoft YaHei", monospace;
   }
+  /* Windows：等宽区域(ID/数字/URL/标签)的英文也统一成微软雅黑，与页面其余部分一致；
+     Mac 保持上面的等宽栈不变。由脚本按平台加 html.win 触发。 */
+  html.win { --mono: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
   body {
@@ -635,6 +638,8 @@
 <div class="toast" id="toast"></div>
 
 <script>
+/* Windows 上把等宽区域也切成微软雅黑（英文/数字一并），与页面字体统一 */
+if (/Windows/i.test(navigator.userAgent)) document.documentElement.classList.add("win");
 /* ═══════════ DOM 工具（不使用 innerHTML 处理用户数据，防注入）═══════════ */
 function h(tag, attrs, ...kids) {
   const e = document.createElement(tag);
