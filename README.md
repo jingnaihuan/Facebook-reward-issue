@@ -15,7 +15,9 @@
 
 首次运行会自动安装依赖（`openpyxl`），服务就绪后**自动打开浏览器**访问中台页面（`http://localhost:8765`）。关闭该终端 / 命令行窗口即停止服务。
 
-> 启动脚本默认只自动装 `openpyxl`。如果要用到 Eastblue 自动下载（步骤 3），还需手动装一次 Playwright 及浏览器内核：
+> 启动脚本默认只自动装 `openpyxl`。Eastblue 自动下载（步骤 3）依赖 Playwright 浏览器内核（chromium）——
+> **首次点击「拉取玩家表」时会自动下载内核**（约 150MB，界面有进度提示），无需手动操作。
+> 若想提前手动装好（可选）：
 > ```bash
 > # Mac
 > cd backend && pip3 install -r requirements.txt && python3 -m playwright install chromium

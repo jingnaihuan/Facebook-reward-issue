@@ -34,7 +34,9 @@
     --shadow-lg: 0 18px 48px -16px rgba(23,33,54,.22);
     --display: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     --body: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, "Cascadia Code", monospace;
+    /* 等宽栈末尾补中文字体：数字/英文走等宽，中文回落到与正文一致的黑体，
+       避免 Windows 上中文落到默认宋体(SimSun)、跟正文微软雅黑不一致。 */
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, "Cascadia Code", "PingFang SC", "Microsoft YaHei", monospace;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
@@ -178,7 +180,7 @@
   textarea { font-family: var(--mono); line-height: 1.55; resize: vertical; min-height: 150px; }
   input:focus, select:focus, textarea:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim); }
   input::placeholder, textarea::placeholder { color: var(--muted-2); }
-  select { cursor: pointer; -webkit-appearance: none; appearance: none;
+  select { cursor: pointer; font-family: var(--body); -webkit-appearance: none; appearance: none;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%236b7482' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
     background-repeat: no-repeat; background-position: right 13px center; padding-right: 34px; }
 
@@ -673,11 +675,15 @@ function toast(msg, kind) {
 }
 
 /* ═══════════ 状态灯 ═══════════ */
-fetch("/api/ping").then(r=>r.json()).then(d=>{
-  const p = $("statusPill");
-  if (d.ok) { p.className = "status-pill on"; $("statusText").textContent = "服务已就绪"; }
-  else { p.className = "status-pill err"; $("statusText").textContent = "服务异常"; }
-}).catch(()=>{ $("statusPill").className = "status-pill err"; $("statusText").textContent = "无法连接"; });
+function pingServer(){
+  fetch("/api/ping", {cache:"no-store"}).then(r=>r.json()).then(d=>{
+    const p = $("statusPill");
+    if (d.ok) { p.className = "status-pill on"; $("statusText").textContent = "服务已就绪"; }
+    else { p.className = "status-pill err"; $("statusText").textContent = "服务异常"; }
+  }).catch(()=>{ $("statusPill").className = "status-pill err"; $("statusText").textContent = "已断连（请重新双击启动脚本）"; });
+}
+pingServer();
+setInterval(pingServer, 4000);   // 心跳：关闭命令行/终端后约 4 秒内自动变「已断连」
 
 /* ═══════════ 步骤导航 ═══════════ */
 let curStep = 1;
@@ -1020,8 +1026,9 @@ $("fbBtnFetch").onclick = async () => {
       const tb = b.created_time ? Date.parse(b.created_time) : 0;
       return ta - tb;
     });
+    // 不过滤空内容留言（纯图片/贴图）：它们照常计入总数，提不出 ID 时会进「无有效ID」，
+    // 保证「抓取合计」与「留言总数」一致，不让留言神秘消失。
     const comments = sorted
-      .filter(c => (c.message || "").trim() !== "")
       .map((c, idx) => ({
         order: idx + 1,
         content: c.message || "",

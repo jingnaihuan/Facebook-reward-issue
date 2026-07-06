@@ -10,7 +10,7 @@
 
 默认无窗口(headless)运行；若未登录/登录过期，自动弹出可见浏览器，人工登录后 profile 持久化。
 """
-import os, sys, re, argparse
+import os, sys, re, argparse, subprocess
 HERE = os.path.dirname(os.path.abspath(__file__))
 try:
     from reward_hub.common import emit, app_data_dir, work_dir
@@ -87,10 +87,35 @@ def _attempt(p, url, ids, outdir, headless, login_wait):
         ctx.close()
 
 
+def _ensure_chromium(p):
+    """首次使用自动下载 chromium 内核。缺失时（尤其 Windows 全新环境）自动 install，
+    避免抛出 'Executable doesn't exist / playwright install' 直接报错。"""
+    try:
+        exe = p.chromium.executable_path
+    except Exception:
+        exe = None
+    if exe and os.path.exists(exe):
+        return
+    _progress("首次使用：正在下载浏览器内核 chromium（约 150MB，请耐心等待几分钟）…")
+    proc = subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"],
+                          capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            "自动下载浏览器内核失败，请在命令行手动运行：\n"
+            "  python -m playwright install chromium\n"
+            + (proc.stderr or proc.stdout or ""))
+    _progress("浏览器内核准备完成，继续…")
+
+
 def download(url, ids, outdir):
     from playwright.sync_api import sync_playwright
     url = _strip_auto_download(url)
     with sync_playwright() as p:
+        try:
+            _ensure_chromium(p)
+        except Exception as e:
+            emit({"ok": False, "error": str(e)})
+            return
         # 1) 无窗口优先（已登录情况下全程后台）
         _progress("启动无窗口浏览器…")
         try:
