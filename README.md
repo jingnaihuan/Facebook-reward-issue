@@ -8,25 +8,44 @@
 
 ## 启动方式
 
-**推荐：双击 `启动.command`**（Mac）。首次运行会自动安装依赖（`openpyxl`），并自动打开浏览器访问中台页面。
+前置：本机需装有 **Python 3.9+**（Windows 安装时请勾选「Add python.exe to PATH」）。
 
-> `启动.command` 目前只自动装 `openpyxl`。如果要用到 Eastblue 自动下载（步骤 3），还需手动装一次 Playwright 及浏览器内核：
+- **Mac：双击 `启动.command`**
+- **Windows：双击 `启动.bat`**（自动探测 `py` / `python`）
+
+首次运行会自动安装依赖（`openpyxl`），服务就绪后**自动打开浏览器**访问中台页面（`http://localhost:8765`）。关闭该终端 / 命令行窗口即停止服务。
+
+> 启动脚本默认只自动装 `openpyxl`。如果要用到 Eastblue 自动下载（步骤 3），还需手动装一次 Playwright 及浏览器内核：
 > ```bash
+> # Mac
 > cd backend && pip3 install -r requirements.txt && python3 -m playwright install chromium
+> ```
+> ```bat
+> REM Windows
+> cd backend && py -m pip install -r requirements.txt && py -m playwright install chromium
 > ```
 
 手动启动：
 
 ```bash
+# Mac
 cd backend
 pip3 install -r requirements.txt
 python3 -m playwright install chromium
 python3 server.py
 ```
 
-然后浏览器打开 http://127.0.0.1:8765
+```bat
+REM Windows
+cd backend
+py -m pip install -r requirements.txt
+py -m playwright install chromium
+py server.py
+```
 
-服务基于标准库 `http.server`，无框架依赖；端口固定 `8765`。
+然后浏览器打开 http://localhost:8765（脚本会自动打开）。
+
+服务基于标准库 `http.server`，无框架依赖；端口固定 `8765`。导出时会弹出系统原生「另存为」对话框（Mac 用 osascript，Windows 用 tkinter）；若环境无对话框可用，自动落到工作区 `~/Documents/发奖中台工作区`。
 
 ## 五步流程
 
@@ -131,4 +150,4 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest
 
 - **FB 真机抓取**：需要真实 App ID / Token 与粉专权限，本地无凭证未做真实抓取验证（逻辑与选择器沿用已验证可行的 `Facebook留言抓取` 工具）。
 - **Eastblue 真实下载**：需要真实登录会话，且首次使用后应核对实际导出表头是否与 `_HEADER_MAP` 一致，如不一致需调整映射。
-- **Windows 适配**：尚未做，当前只支持 Mac；`启动.command` 是 Mac 专用的一键启动脚本。
+- **Windows 适配**：已完成代码层改造与跨平台逻辑测试（`启动.bat`、UTF-8 子进程编码修复、tkinter 保存对话框、`webbrowser` 统一开浏览器）。开发机为 Mac，Windows 侧的**双击真实运行**（`.bat` 启动、依赖安装、原生对话框弹出）需在 Windows 机器上按 [`Windows验收清单.md`](Windows验收清单.md) 人工验收一次。

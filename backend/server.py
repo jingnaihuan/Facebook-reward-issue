@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """发奖中台本地服务（标准库 http.server，无框架）。"""
-import os, sys, json, uuid, threading, subprocess, tempfile, datetime
+import os, sys, json, uuid, threading, subprocess, tempfile, datetime, webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -8,6 +8,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 from reward_hub import common
+from reward_hub import platform_util
 from reward_hub.extract_id import extract_id
 from reward_hub.dedup import dedup
 from reward_hub.language_filter import filter_by_language
@@ -37,7 +38,10 @@ def _run_eastblue(job_id, url, ids):
         proc = subprocess.Popen(
             [sys.executable, script, "--url", url,
              "--ids-file", ids_path, "--outdir", common.work_dir()],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            # 子进程 emit 的是 UTF-8（含中文进度）。必须显式指定编码，
+            # 否则中文版 Windows 会用 cp936 解码导致乱码 / JSON 解析失败。
+            text=True, encoding="utf-8", errors="replace", bufsize=1)
         for line in proc.stdout:
             s = line.strip()
             if not s:
@@ -76,27 +80,6 @@ def _run_eastblue(job_id, url, ids):
     with JOBS_LOCK:
         JOBS[job_id]["result"] = result
         JOBS[job_id]["done"] = True
-
-
-def _choose_save_path(default_name):
-    """弹出 macOS 原生「存储」对话框让用户选路径+文件名。
-    返回 (kind, path)：ok=选定路径 / cancel=用户取消 / fallback=无 osascript(非 Mac)。"""
-    safe = default_name.replace('"', "").replace("\\", "")
-    script = ('set theFile to choose file name with prompt "保存发奖名单" default name "%s"\n'
-              "POSIX path of theFile" % safe)
-    try:
-        proc = subprocess.run(["osascript", "-e", script],
-                              capture_output=True, text=True, timeout=300)
-    except FileNotFoundError:
-        return ("fallback", None)
-    except Exception:
-        return ("fallback", None)
-    out = (proc.stdout or "").strip()
-    if proc.returncode == 0 and out:
-        if not out.lower().endswith(".xlsx"):
-            out += ".xlsx"
-        return ("ok", out)
-    return ("cancel", None)          # 用户点了取消，或对话框异常
 
 
 def process_pipeline(raw_comments, players, dedup_strategy, target_langs, awards):
@@ -190,7 +173,7 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == "/api/export":
                 b = self._body()
                 default_name = "发奖名单-%s.xlsx" % datetime.datetime.now().strftime("%Y%m%d")
-                kind, out_path = _choose_save_path(default_name)
+                kind, out_path = platform_util.choose_save_path(default_name)
                 if kind == "cancel":
                     self._json({"ok": False, "cancelled": True, "error": "已取消导出"})
                     return
@@ -217,6 +200,20 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": False, "error": str(e)}, 500)
 
 
+def _open_browser():
+    """服务就绪后打开浏览器。两端统一交给 Python，启动脚本不再各自 open/start。
+    用 localhost（而非 127.0.0.1），FB 方式 A 登录才不会被拦。
+    设环境变量 REWARD_HUB_NO_BROWSER=1 可关闭（测试 / 由预览器托管时）。"""
+    if os.environ.get("REWARD_HUB_NO_BROWSER") == "1":
+        return
+    try:
+        webbrowser.open("http://localhost:%d" % PORT)
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
-    print("发奖中台已启动：http://127.0.0.1:%d" % PORT, flush=True)
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)  # 此时已 bind+listen
+    print("发奖中台已启动：http://localhost:%d" % PORT, flush=True)
+    threading.Timer(0.6, _open_browser).start()
+    httpd.serve_forever()
