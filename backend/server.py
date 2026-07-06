@@ -35,6 +35,8 @@ def _run_eastblue(job_id, url, ids):
     try:
         with open(ids_path, "w", encoding="utf-8") as f:
             f.write("\n".join(str(i) for i in ids))
+        # 不新建进程组：让子进程与浏览器留在同一控制台/会话，关闭终端或命令行窗口时
+        # 系统会把关闭信号级联到整棵进程树，自动终止，不残留后台进程。
         proc = subprocess.Popen(
             [sys.executable, script, "--url", url,
              "--ids-file", ids_path, "--outdir", common.work_dir()],
@@ -42,6 +44,9 @@ def _run_eastblue(job_id, url, ids):
             # 子进程 emit 的是 UTF-8（含中文进度）。必须显式指定编码，
             # 否则中文版 Windows 会用 cp936 解码导致乱码 / JSON 解析失败。
             text=True, encoding="utf-8", errors="replace", bufsize=1)
+        with JOBS_LOCK:
+            if job_id in JOBS:
+                JOBS[job_id]["proc"] = proc      # 记录以便退出时清理
         for line in proc.stdout:
             s = line.strip()
             if not s:
@@ -87,9 +92,13 @@ def process_pipeline(raw_comments, players, dedup_strategy, target_langs, awards
     invalid = []
     rows = []
     for c in raw_comments:
-        pid = extract_id(c.get("content", ""))
+        content = c.get("content", "")
+        pid = extract_id(content)
         if pid:
             rows.append({**c, "player_id": pid})
+        elif not str(content).strip():
+            # 纯图片/动图/贴图等无文字留言：计入无效并标清原因，不再是空白行
+            invalid.append({**c, "reject_reason": "空内容（图片/动图等，无文字）"})
         else:
             invalid.append({**c, "reject_reason": "无有效ID"})
 
@@ -189,7 +198,7 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 job_id = uuid.uuid4().hex
                 with JOBS_LOCK:
-                    JOBS[job_id] = {"progress": [], "done": False, "result": None}
+                    JOBS[job_id] = {"progress": [], "done": False, "result": None, "proc": None}
                 t = threading.Thread(target=_run_eastblue,
                                      args=(job_id, b["url"], ids), daemon=True)
                 t.start()
@@ -212,8 +221,57 @@ def _open_browser():
         pass
 
 
+def _terminate_proc_tree(proc):
+    """终止下载子进程及其浏览器（安全网：用于 kill <服务pid> 这类不会级联到子进程的情况；
+    关闭终端/命令行窗口的常见情况由系统级联终止，无需这里介入）。不会误杀服务自身。"""
+    try:
+        if proc is None or proc.poll() is not None:
+            return
+        if os.name == "nt":
+            # /T 连同子进程树（含浏览器）一起结束，仅针对该子进程 PID，不影响服务自身
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                           capture_output=True)
+        else:
+            # 只终止该子进程（Playwright 浏览器在其父进程退出后会自行关闭）
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                proc.kill()
+    except Exception:
+        pass
+
+
+def _cleanup_jobs():
+    """服务退出时杀掉所有仍在跑的 Eastblue 下载子进程及其浏览器。"""
+    with JOBS_LOCK:
+        procs = [j.get("proc") for j in JOBS.values()]
+    for proc in procs:
+        _terminate_proc_tree(proc)
+
+
 if __name__ == "__main__":
+    import atexit, signal
+    atexit.register(_cleanup_jobs)
+
+    def _on_signal(signum, frame):
+        _cleanup_jobs()
+        os._exit(0)
+
+    # Ctrl+C / kill / 关闭终端(SIGHUP) 时都先清理子进程再退出
+    _sigs = [signal.SIGINT, signal.SIGTERM]
+    if hasattr(signal, "SIGHUP"):
+        _sigs.append(signal.SIGHUP)
+    for _s in _sigs:
+        try:
+            signal.signal(_s, _on_signal)
+        except (ValueError, OSError):
+            pass
+
     httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)  # 此时已 bind+listen
     print("发奖中台已启动：http://localhost:%d" % PORT, flush=True)
     threading.Timer(0.6, _open_browser).start()
-    httpd.serve_forever()
+    try:
+        httpd.serve_forever()
+    finally:
+        _cleanup_jobs()

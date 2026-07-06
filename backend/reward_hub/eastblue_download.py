@@ -91,6 +91,25 @@ def _launch_persistent(p, profile, headless):
         return p.chromium.launch_persistent_context(profile, **kwargs)  # 回退内置内核
 
 
+# 检测/等待时长（毫秒），集中在此便于调整：
+HEADLESS_DETECT_WAIT = 9000    # 无窗口下判定「已登录 or 需登录」的最长等待（缩短自 20s）
+VISIBLE_LOGIN_WAIT = 180000    # 可见窗口里等用户完成 SSO 登录的最长时间
+RELOGIN_DETECT_WAIT = 30000    # 登录后无窗口重跑时，等页面就绪的最长时间（登录态已在，通常很快）
+
+_LOGIN_MARK = "+增加条件"       # 该按钮出现 = 已登录且页面就绪
+
+
+def _is_no_browser(err):
+    low = str(err).lower()
+    return "executable doesn't exist" in low or "could not find" in low
+
+
+def _emit_no_browser():
+    emit({"ok": False, "error":
+          "未检测到可用浏览器（需要 Google Chrome 或 Microsoft Edge）。"
+          "Windows 一般自带 Edge；若确实没有，请安装 Chrome 后重试。"})
+
+
 def _attempt(p, url, ids, outdir, headless, login_wait):
     profile = os.path.join(app_data_dir(), "eastblue_profile")
     os.makedirs(profile, exist_ok=True)
@@ -98,42 +117,63 @@ def _attempt(p, url, ids, outdir, headless, login_wait):
     try:
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         page.goto(url)
-        # 等应用加载完成（登录成功后「+增加条件」才会出现）
-        page.get_by_text("+增加条件", exact=False).first.wait_for(timeout=login_wait)
+        # 等应用加载完成（登录成功后「+增加条件」才会出现；元素一出现即返回，不会白等满 login_wait）
+        page.get_by_text(_LOGIN_MARK, exact=False).first.wait_for(timeout=login_wait)
         page.wait_for_timeout(1500)
         return _search_and_export(page, ids, outdir)
     finally:
         ctx.close()
 
 
+def _login_only(p, url, login_wait):
+    """可见窗口仅用于登录：等『+增加条件』出现（=登录完成、页面就绪）后立即关窗。
+    登录态已持久化到 profile，真正的搜索/导出改由无窗口浏览器完成，避免留窗口让用户误操作。"""
+    profile = os.path.join(app_data_dir(), "eastblue_profile")
+    os.makedirs(profile, exist_ok=True)
+    ctx = _launch_persistent(p, profile, headless=False)
+    try:
+        page = ctx.pages[0] if ctx.pages else ctx.new_page()
+        page.goto(url)
+        page.get_by_text(_LOGIN_MARK, exact=False).first.wait_for(timeout=login_wait)
+        page.wait_for_timeout(600)
+    finally:
+        ctx.close()      # 无论登录成功与否都关窗，不残留窗口
+
+
 def download(url, ids, outdir):
     from playwright.sync_api import sync_playwright
     url = _strip_auto_download(url)
     with sync_playwright() as p:
-        # 1) 无窗口优先（已登录情况下全程后台）
+        # 1) 无窗口优先：已登录则全程后台完成（判定超时已缩短）
         _progress("启动无窗口浏览器…")
         try:
             _progress("打开玩家管理页面…")
-            path = _attempt(p, url, ids, outdir, headless=True, login_wait=20000)
+            path = _attempt(p, url, ids, outdir, headless=True, login_wait=HEADLESS_DETECT_WAIT)
             _progress("导出完成，正在解析玩家表…")
             emit({"ok": True, "path": path})
             return
-        except Exception:
-            pass
-        # 2) 回退：可见浏览器，等人工登录后再走一遍
-        _progress("需要登录，已打开浏览器窗口，请完成 Eastblue 登录…", need_login=True)
+        except Exception as e:
+            if _is_no_browser(e):
+                _emit_no_browser(); return
+            # 其它异常（多为未登录导致等不到「+增加条件」）→ 转登录流程
+
+        # 2) 可见窗口仅登录：登录成功即关窗
+        _progress("需要登录，已打开浏览器窗口，请完成 Eastblue 登录（登录后窗口会自动关闭）…", need_login=True)
         try:
-            path = _attempt(p, url, ids, outdir, headless=False, login_wait=180000)
+            _login_only(p, url, login_wait=VISIBLE_LOGIN_WAIT)
+        except Exception as e:
+            if _is_no_browser(e):
+                _emit_no_browser(); return
+            emit({"ok": False, "error": "登录未完成或超时：%s" % e}); return
+
+        # 3) 登录态已持久化 → 无窗口重跑正事（搜索/导出全程后台）
+        _progress("登录成功，登录窗口已关闭，正在后台拉取…")
+        try:
+            path = _attempt(p, url, ids, outdir, headless=True, login_wait=RELOGIN_DETECT_WAIT)
             _progress("导出完成，正在解析玩家表…")
             emit({"ok": True, "path": path})
         except Exception as e:
-            low = str(e).lower()
-            if "executable doesn't exist" in low or "could not find" in low:
-                emit({"ok": False, "error":
-                      "未检测到可用浏览器（需要 Google Chrome 或 Microsoft Edge）。"
-                      "Windows 一般自带 Edge；若确实没有，请安装 Chrome 后重试。"})
-            else:
-                emit({"ok": False, "error": str(e)})
+            emit({"ok": False, "error": str(e)})
 
 
 def _load_ids(a):
