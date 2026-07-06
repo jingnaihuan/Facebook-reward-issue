@@ -10,7 +10,7 @@
 
 默认无窗口(headless)运行；若未登录/登录过期，自动弹出可见浏览器，人工登录后 profile 持久化。
 """
-import os, sys, re, argparse, subprocess
+import os, sys, re, argparse
 HERE = os.path.dirname(os.path.abspath(__file__))
 try:
     from reward_hub.common import emit, app_data_dir, work_dir
@@ -71,11 +71,30 @@ def _search_and_export(page, ids, outdir):
     return path
 
 
+def _browser_channel():
+    """驱动系统已装浏览器：Windows 用自带 Edge，Mac 用 Chrome（均为 Chromium 内核）。
+    这样不依赖需联网下载的内置 chromium，避免公司网络挡住 CDN 下载。"""
+    return "msedge" if sys.platform.startswith("win") else "chrome"
+
+
+def _launch_persistent(p, profile, headless):
+    """优先用系统 Chrome/Edge 启动持久化上下文；系统浏览器缺失时回退到内置 chromium。"""
+    kwargs = dict(headless=headless, accept_downloads=True)
+    try:
+        return p.chromium.launch_persistent_context(profile, channel=_browser_channel(), **kwargs)
+    except Exception as e:
+        low = str(e).lower()
+        miss = ("executable doesn't exist" in low or "could not find" in low
+                or ("channel" in low and "not found" in low))
+        if not miss:
+            raise                       # profile 占用/网络等其它错误，照常抛出
+        return p.chromium.launch_persistent_context(profile, **kwargs)  # 回退内置内核
+
+
 def _attempt(p, url, ids, outdir, headless, login_wait):
     profile = os.path.join(app_data_dir(), "eastblue_profile")
     os.makedirs(profile, exist_ok=True)
-    ctx = p.chromium.launch_persistent_context(
-        profile, headless=headless, accept_downloads=True)
+    ctx = _launch_persistent(p, profile, headless)
     try:
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         page.goto(url)
@@ -87,35 +106,10 @@ def _attempt(p, url, ids, outdir, headless, login_wait):
         ctx.close()
 
 
-def _ensure_chromium(p):
-    """首次使用自动下载 chromium 内核。缺失时（尤其 Windows 全新环境）自动 install，
-    避免抛出 'Executable doesn't exist / playwright install' 直接报错。"""
-    try:
-        exe = p.chromium.executable_path
-    except Exception:
-        exe = None
-    if exe and os.path.exists(exe):
-        return
-    _progress("首次使用：正在下载浏览器内核 chromium（约 150MB，请耐心等待几分钟）…")
-    proc = subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"],
-                          capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(
-            "自动下载浏览器内核失败，请在命令行手动运行：\n"
-            "  python -m playwright install chromium\n"
-            + (proc.stderr or proc.stdout or ""))
-    _progress("浏览器内核准备完成，继续…")
-
-
 def download(url, ids, outdir):
     from playwright.sync_api import sync_playwright
     url = _strip_auto_download(url)
     with sync_playwright() as p:
-        try:
-            _ensure_chromium(p)
-        except Exception as e:
-            emit({"ok": False, "error": str(e)})
-            return
         # 1) 无窗口优先（已登录情况下全程后台）
         _progress("启动无窗口浏览器…")
         try:
@@ -133,7 +127,13 @@ def download(url, ids, outdir):
             _progress("导出完成，正在解析玩家表…")
             emit({"ok": True, "path": path})
         except Exception as e:
-            emit({"ok": False, "error": str(e)})
+            low = str(e).lower()
+            if "executable doesn't exist" in low or "could not find" in low:
+                emit({"ok": False, "error":
+                      "未检测到可用浏览器（需要 Google Chrome 或 Microsoft Edge）。"
+                      "Windows 一般自带 Edge；若确实没有，请安装 Chrome 后重试。"})
+            else:
+                emit({"ok": False, "error": str(e)})
 
 
 def _load_ids(a):
