@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """发奖中台本地服务（标准库 http.server，无框架）。"""
-import os, sys, json, uuid, threading, subprocess, tempfile, datetime, webbrowser
+import os, sys, json, time, uuid, threading, subprocess, tempfile, datetime, webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -16,10 +16,26 @@ from reward_hub.rule_engine import run_awards
 from reward_hub.export import export_reward_workbook
 from reward_hub.config_store import ConfigStore
 
-ROOT = os.path.dirname(HERE)
-FRONTEND = os.path.join(ROOT, "frontend")
+# 前端资源目录：冻结后从 PyInstaller 解包目录(_MEIPASS)读，开发模式从仓库 frontend/ 读。
+if common.is_frozen():
+    FRONTEND = os.path.join(getattr(sys, "_MEIPASS", HERE), "frontend")
+else:
+    ROOT = os.path.dirname(HERE)
+    FRONTEND = os.path.join(ROOT, "frontend")
 PRESETS = os.path.join(common.app_data_dir(), "presets.json")
 PORT = 8765
+
+
+def _eastblue_cmd(url, ids_path, outdir):
+    """构造 Eastblue 下载子进程命令：
+    开发模式 `python3 eastblue_download.py --url ...`；
+    冻结模式 `<exe> --run-script eastblue --url ...`（由 app_entry 分发到 eastblue_download.main）。
+    冻结版里 sys.executable 是打包 exe 本身，无法直接跑 .py，必须走自我重入分发。"""
+    args = ["--url", url, "--ids-file", ids_path, "--outdir", outdir]
+    if common.is_frozen():
+        return [sys.executable, "--run-script", "eastblue"] + args
+    script = os.path.join(HERE, "reward_hub", "eastblue_download.py")
+    return [sys.executable, script] + args
 
 
 # ── Eastblue 下载任务（后台线程 + 进度轮询）─────────────────────────
@@ -29,7 +45,6 @@ JOBS_LOCK = threading.Lock()
 
 def _run_eastblue(job_id, url, ids):
     """后台线程：按玩家ID跑下载子进程，逐行收集进度，最后解析玩家表并存入 JOBS。"""
-    script = os.path.join(HERE, "reward_hub", "eastblue_download.py")
     result, tail = None, []
     ids_path = os.path.join(tempfile.gettempdir(), "reward_hub_ids_%s.txt" % job_id)
     try:
@@ -38,12 +53,13 @@ def _run_eastblue(job_id, url, ids):
         # 不新建进程组：让子进程与浏览器留在同一控制台/会话，关闭终端或命令行窗口时
         # 系统会把关闭信号级联到整棵进程树，自动终止，不残留后台进程。
         proc = subprocess.Popen(
-            [sys.executable, script, "--url", url,
-             "--ids-file", ids_path, "--outdir", common.work_dir()],
+            _eastblue_cmd(url, ids_path, common.work_dir()),
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             # 子进程 emit 的是 UTF-8（含中文进度）。必须显式指定编码，
             # 否则中文版 Windows 会用 cp936 解码导致乱码 / JSON 解析失败。
-            text=True, encoding="utf-8", errors="replace", bufsize=1)
+            text=True, encoding="utf-8", errors="replace", bufsize=1,
+            # 打包版(无黑框)在 Windows 上拉子进程会闪控制台窗，抑制之。
+            **common.no_window_kwargs())
         with JOBS_LOCK:
             if job_id in JOBS:
                 JOBS[job_id]["proc"] = proc      # 记录以便退出时清理
@@ -144,8 +160,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
-        elif self.path == "/api/ping":
+        elif self.path in ("/api/ping", "/api/keepalive"):
+            _touch_alive()          # 前端每 4s 心跳；看门狗据此判断网页是否还开着
             self._json({"ok": True})
+        elif self.path == "/api/shutdown":
+            # 主动退出（app_entry 启动新实例前先请旧实例自愿退出）。先回包再退，避免连接被重置。
+            self._json({"ok": True})
+            threading.Timer(0.3, lambda: os._exit(0)).start()
         elif self.path == "/api/presets":
             store = ConfigStore(PRESETS)
             self._json({"default": store.get_default(),
@@ -250,7 +271,46 @@ def _cleanup_jobs():
         _terminate_proc_tree(proc)
 
 
-if __name__ == "__main__":
+# ── 进程看门狗 ─────────────────────────────────────────────────────
+# 打包版(.app/.exe)没有终端窗口，无法靠"关终端"停服务。改由前端心跳驱动：
+# 前端每 4s ping 一次 /api/ping，超过宽限期无心跳（= 网页已关 / 电脑休眠）则自动退出，
+# 实现「关网页后台自动关」，并避免迭代后旧后台残留。
+# 宽限取 5 分钟：浏览器对切到后台的标签会把定时器降频到最狠约 1/分钟，300s 有 5 倍余量，
+# 填表途中切走别的窗口也不会被误杀（代价仅是真关网页后进程多赖几分钟才退，无害）。
+WATCHDOG_GRACE = 300       # 秒。
+_last_alive = [time.time()]
+
+
+def _touch_alive():
+    _last_alive[0] = time.time()
+
+
+def _any_job_active():
+    """是否有 Eastblue 下载任务仍在跑（未完成）。子进程自带超时上限，不会长期赖住。"""
+    with JOBS_LOCK:
+        return any(not j.get("done") for j in JOBS.values())
+
+
+def _watchdog_expired(now):
+    """看门狗判定谓词（抽出便于单测）：距上次心跳是否已超过宽限期。
+    ★ 有下载任务在跑时永不判过期——否则后台标签被降频、心跳拖过宽限，
+       会把服务连同正在跑的 Eastblue 下载子进程一起误杀。"""
+    if _any_job_active():
+        return False
+    return (now - _last_alive[0]) > WATCHDOG_GRACE
+
+
+def _watchdog():
+    while True:
+        time.sleep(5)
+        if _watchdog_expired(time.time()):
+            _cleanup_jobs()
+            os._exit(0)
+
+
+def main():
+    """服务入口。开发模式 `python3 server.py` 直接调用；
+    冻结模式由 packaging/app_entry 在后台线程调用（信号注册在子线程会被下方 try 吞掉，无害）。"""
     import atexit, signal
     atexit.register(_cleanup_jobs)
 
@@ -258,7 +318,8 @@ if __name__ == "__main__":
         _cleanup_jobs()
         os._exit(0)
 
-    # Ctrl+C / kill / 关闭终端(SIGHUP) 时都先清理子进程再退出
+    # Ctrl+C / kill / 关闭终端(SIGHUP) 时都先清理子进程再退出（信号只能在主线程注册，
+    # 冻结版里 main 跑在子线程，signal.signal 会抛 ValueError，被 except 吞掉——由看门狗兜底）。
     _sigs = [signal.SIGINT, signal.SIGTERM]
     if hasattr(signal, "SIGHUP"):
         _sigs.append(signal.SIGHUP)
@@ -268,6 +329,10 @@ if __name__ == "__main__":
         except (ValueError, OSError):
             pass
 
+    common.write_pid_file()                 # 供下次启动兜底定位旧实例
+    _touch_alive()
+    threading.Thread(target=_watchdog, daemon=True).start()
+
     httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)  # 此时已 bind+listen
     print("发奖中台已启动：http://localhost:%d" % PORT, flush=True)
     threading.Timer(0.6, _open_browser).start()
@@ -275,3 +340,7 @@ if __name__ == "__main__":
         httpd.serve_forever()
     finally:
         _cleanup_jobs()
+
+
+if __name__ == "__main__":
+    main()

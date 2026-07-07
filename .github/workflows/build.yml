@@ -1,0 +1,53 @@
+name: build
+
+# 手动触发，或推送 v* tag 时触发（tag 会把产物附到 Release）。
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write   # Release 步骤上传产物需要
+
+jobs:
+  build-mac:
+    # 固定用 Intel runner 产出 x86_64 .app：可在 Intel 与 Apple 芯片(经 Rosetta)两类 Mac 上都运行，
+    # 一个包通吃。若确定同事全是 Apple 芯片、想要原生 arm64，把此处改为 macos-14 即可。
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build .app
+        run: bash packaging/build_mac.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RewardHub-mac
+          path: dist/RewardHub-mac.zip
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/RewardHub-mac.zip
+
+  build-win:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build .exe
+        run: packaging\build_win.bat
+        shell: cmd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RewardHub-win
+          path: dist/RewardHub-win.zip
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/RewardHub-win.zip

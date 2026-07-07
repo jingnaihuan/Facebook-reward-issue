@@ -4,3 +4,8 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
+
+# 打包构建产物
+build/
+dist/
+.build_venv/

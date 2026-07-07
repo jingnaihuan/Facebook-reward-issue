@@ -50,6 +50,23 @@ py server.py
 
 服务基于标准库 `http.server`，无框架依赖；端口固定 `8765`。导出时会弹出系统原生「另存为」对话框（Mac 用 osascript，Windows 用 tkinter）；若环境无对话框可用，自动落到工作区 `~/Documents/发奖中台工作区`。
 
+## 打包成本地 App / Exe（分发给无 Python 环境的同事）
+
+面向不装 Python 的同事，可打成 **Mac `.app` / Windows `.exe`**，双击即用（内含 Python 运行时 + Playwright driver，约 50–200MB）。
+
+- **本机构建**（从仓库根目录运行）：
+  - Mac：`bash packaging/build_mac.sh` → 产出 `dist/RewardHub-mac.zip`
+  - Windows：`packaging\build_win.bat` → 产出 `dist\RewardHub-win.zip`
+- **GitHub 自动构建**：推一个 `v*` tag（如 `git tag v1.0 && git push --tags`），`.github/workflows/build.yml` 会在 Mac + Windows runner 上各构建一份，附到 Release。也可在 Actions 页手动触发（workflow_dispatch）。
+
+打包版与脚本版的差异（已在 `packaging/app_entry.py` / `backend/server.py` 处理）：
+
+- **不靠"关终端"停服务**（`.app`/`.exe` 无终端窗口）。改为**看门狗**：前端每 4s 心跳 `/api/ping`，**关闭网页约 5 分钟后后台自动退出**，不残留进程；宽限取长以防后台标签被浏览器降频误杀，且 **Eastblue 下载进行中绝不退出**。
+- **子脚本自我重入**：打包后无法 `python 脚本.py` 跑 Playwright，Eastblue 下载改由 `<exe> --run-script eastblue …` 重新调用自身分发。
+- **依旧用系统浏览器**：不内置 Chromium，Mac 用 Chrome、Windows 用自带 Edge，不受公司网络挡 CDN 影响。
+- **未做付费签名**：首次打开 Mac/Windows 会弹安全提示，随包附 `packaging/首次打开必读.txt` 指导一次性放行。
+- **务必用 `localhost` 打开**（入口已默认）：FB 方式 A 登录只认应用域名 localhost，用 `127.0.0.1` 会被拦。
+
 ## 五步流程
 
 ### 步骤 1 · 抓取留言
@@ -154,3 +171,4 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest
 - **FB 真机抓取**：需要真实 App ID / Token 与粉专权限，本地无凭证未做真实抓取验证（逻辑与选择器沿用已验证可行的 `Facebook留言抓取` 工具）。
 - **Eastblue 真实下载**：需要真实登录会话，且首次使用后应核对实际导出表头是否与 `_HEADER_MAP` 一致，如不一致需调整映射。
 - **Windows 适配**：已完成代码层改造与跨平台逻辑测试（`启动.bat`、UTF-8 子进程编码修复、tkinter 保存对话框、`webbrowser` 统一开浏览器）。开发机为 Mac，Windows 侧的**双击真实运行**（`.bat` 启动、依赖安装、原生对话框弹出）需在 Windows 机器上按 [`Windows验收清单.md`](Windows验收清单.md) 人工验收一次。
+- **打包版（.app / .exe）**：Mac `.app` 已在本机真机构建并端到端验证（server 启动、前端页面、心跳、`--run-script eastblue` 分发、看门狗自动退出、`/api/shutdown`）。**Windows `.exe`** 由 GitHub Actions 构建，其双击运行（SmartScreen 放行、Eastblue 子进程分发、tkinter 另存为）需在 Windows 机器上人工验收一次。

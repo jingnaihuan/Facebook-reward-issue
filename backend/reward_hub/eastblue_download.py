@@ -13,10 +13,10 @@
 import os, sys, re, argparse
 HERE = os.path.dirname(os.path.abspath(__file__))
 try:
-    from reward_hub.common import emit, app_data_dir, work_dir
+    from reward_hub.common import emit, app_data_dir, work_dir, force_utf8_std
 except ImportError:
     sys.path.insert(0, os.path.dirname(HERE))
-    from reward_hub.common import emit, app_data_dir, work_dir
+    from reward_hub.common import emit, app_data_dir, work_dir, force_utf8_std
 
 
 def _progress(msg, **extra):
@@ -190,16 +190,24 @@ def _load_ids(a):
     return ids
 
 
-if __name__ == "__main__":
+def main(argv=None):
+    """脚本入口。开发模式由 `python3 eastblue_download.py ...` 调用；
+    冻结模式由 app_entry 的 `--run-script eastblue ...` 分发到此（argv 为剩余参数列表）。"""
+    force_utf8_std()          # 冻结版 console=False 时 stdout 可能为 None / 非 UTF-8，先修好
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", required=True)
     ap.add_argument("--ids", default="")
     ap.add_argument("--ids-file", dest="ids_file", default="")
     ap.add_argument("--outdir", default=work_dir())
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
     os.makedirs(a.outdir, exist_ok=True)
     ids = _load_ids(a)
     if not ids:
         emit({"ok": False, "error": "没有可查询的玩家ID"})
-        sys.exit(0)
+        return 0
     download(a.url, ids, a.outdir)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
