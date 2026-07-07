@@ -57,7 +57,8 @@ py server.py
 - **本机构建**（从仓库根目录运行）：
   - Mac：`bash packaging/build_mac.sh` → 产出 `dist/RewardHub-mac.zip`
   - Windows：`packaging\build_win.bat` → 产出 `dist\RewardHub-win.zip`
-- **GitHub 自动构建**：推一个 `v*` tag（如 `git tag v1.0 && git push --tags`），`.github/workflows/build.yml` 会在 Mac + Windows runner 上各构建一份，附到 Release。也可在 Actions 页手动触发（workflow_dispatch）。
+- **GitHub 自动构建（仅 Windows）**：推一个 `v*` tag（如 `git tag v1.0 && git push --tags`），`.github/workflows/build.yml` 会在 Windows runner 上构建 `.exe` 并附到 Release。也可在 Actions 页手动触发（workflow_dispatch）。
+  - **Mac 包不走 CI**：GitHub 免费的 Intel runner（`macos-13`）正在退役、长期派不到机器，且 arm64 runner 产出的包装不了 Intel Mac。因此 Mac 的 x86_64「通吃」包统一用本地 `bash packaging/build_mac.sh` 构建，再手动上传到对应 Release（`gh release upload <tag> dist/RewardHub-mac.zip`）。
 
 打包版与脚本版的差异（已在 `packaging/app_entry.py` / `backend/server.py` 处理）：
 
