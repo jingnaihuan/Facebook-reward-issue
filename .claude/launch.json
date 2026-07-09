@@ -5,7 +5,7 @@
       "name": "reward-hub",
       "runtimeExecutable": "python3",
       "runtimeArgs": ["backend/server.py"],
-      "port": 8765
+      "port": 18765
     }
   ]
 }

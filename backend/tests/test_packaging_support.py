@@ -163,7 +163,7 @@ def test_app_entry_open_url_uses_localhost():
     # 浏览器地址必须是 localhost（FB 登录只认应用域名 localhost），健康检查用 127.0.0.1
     assert ae.OPEN_URL.startswith("http://localhost:")
     assert ae.PING_BASE.startswith("http://127.0.0.1:")
-    assert ae.PORT == server.PORT == 8765
+    assert ae.PORT == server.PORT == 18765
 
 
 def test_app_entry_script_module_map():

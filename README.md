@@ -13,7 +13,7 @@
 - **Mac：双击 `启动.command`**
 - **Windows：双击 `启动.bat`**（自动探测 `py` / `python`）
 
-首次运行会自动安装依赖（`openpyxl`），服务就绪后**自动打开浏览器**访问中台页面（`http://localhost:8765`）。关闭该终端 / 命令行窗口即停止服务。
+首次运行会自动安装依赖（`openpyxl`），服务就绪后**自动打开浏览器**访问中台页面（`http://localhost:18765`）。关闭该终端 / 命令行窗口即停止服务。
 
 > 启动脚本默认只自动装 `openpyxl`。Eastblue 自动下载（步骤 3）用 Playwright **驱动系统已装的浏览器**
 > （Windows 用自带的 **Microsoft Edge**，Mac 用 **Google Chrome**），**不下载内置 chromium 内核**，
@@ -46,9 +46,9 @@ py -m playwright install chromium
 py server.py
 ```
 
-然后浏览器打开 http://localhost:8765（脚本会自动打开）。
+然后浏览器打开 http://localhost:18765（脚本会自动打开）。
 
-服务基于标准库 `http.server`，无框架依赖；端口固定 `8765`。导出时会弹出系统原生「另存为」对话框（Mac 用 osascript，Windows 用 tkinter）；若环境无对话框可用，自动落到工作区 `~/Documents/发奖中台工作区`。
+服务基于标准库 `http.server`，无框架依赖；端口固定 `18765`。导出时会弹出系统原生「另存为」对话框（Mac 用 osascript，Windows 用 tkinter）；若环境无对话框可用，自动落到工作区 `~/Documents/发奖中台工作区`。
 
 ## 打包成本地 App / Exe（分发给无 Python 环境的同事）
 

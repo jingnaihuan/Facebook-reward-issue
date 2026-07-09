@@ -23,7 +23,7 @@ else:
     ROOT = os.path.dirname(HERE)
     FRONTEND = os.path.join(ROOT, "frontend")
 PRESETS = os.path.join(common.app_data_dir(), "presets.json")
-PORT = 8765
+PORT = 18765
 
 
 def _eastblue_cmd(url, ids_path, outdir):

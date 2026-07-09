@@ -26,7 +26,7 @@ _BACKEND = os.path.normpath(os.path.join(_HERE, "..", "backend"))
 if os.path.isdir(_BACKEND) and _BACKEND not in sys.path:
     sys.path.insert(0, _BACKEND)
 
-PORT = 8765
+PORT = 18765
 PING_BASE = "http://127.0.0.1:%d" % PORT      # 本机健康检查 / shutdown（内部用，不给 FB）
 OPEN_URL = "http://localhost:%d/" % PORT      # 打开给用户的地址（FB 登录只认 localhost）
 

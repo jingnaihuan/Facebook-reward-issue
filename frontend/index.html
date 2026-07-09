@@ -416,27 +416,27 @@
             </div>
           </div>
         </div>
-        <div class="note" style="margin:-6px 0 4px;">首次用方式 A 需在 App 后台做一次性设置，并用 <b>http://localhost:8765</b> 打开本页（不要用 127.0.0.1，否则 FB 登录会被拦）。</div>
+        <div class="note" style="margin:-6px 0 4px;">首次用方式 A 需在 App 后台做一次性设置，并用 <b>http://localhost:18765</b> 打开本页（不要用 127.0.0.1，否则 FB 登录会被拦）。</div>
 
         <details class="help">
           <summary>方式 A 首次设置指南（点开看看要配哪些）</summary>
           <div class="help-body">
-            <p><b>最关键：</b>用 <span class="val">http://localhost:8765</span> 打开本页，<b class="warn">不要用 127.0.0.1</b>——FB 的应用域名不接受 IP，用 IP 一定登录失败。双击「启动.command」现已自动用 localhost。</p>
+            <p><b>最关键：</b>用 <span class="val">http://localhost:18765</span> 打开本页，<b class="warn">不要用 127.0.0.1</b>——FB 的应用域名不接受 IP，用 IP 一定登录失败。双击「启动.command」现已自动用 localhost。</p>
 
             <p>以下在 <b>developers.facebook.com → 你的 App</b> 里设置（一次性）：</p>
 
             <h4>① 设置 → 基本 (Settings · Basic)</h4>
             <ul>
               <li>应用域名 (App Domains)：填 <span class="val">localhost</span></li>
-              <li>底部「+ 添加平台」→ 选「网站」→ 站点网址 <span class="val">http://localhost:8765/</span></li>
+              <li>底部「+ 添加平台」→ 选「网站」→ 站点网址 <span class="val">http://localhost:18765/</span></li>
             </ul>
 
             <h4>② 产品加「Facebook 登录」→ 设置</h4>
             <ul>
               <li>使用 JavaScript SDK 登录 = <b>是</b></li>
-              <li>JavaScript SDK 允许域名：<span class="val">http://localhost:8765</span></li>
+              <li>JavaScript SDK 允许域名：<span class="val">http://localhost:18765</span></li>
               <li>客户端 / 网页 OAuth 登录 = <b>是</b></li>
-              <li>有效 OAuth 重定向 URI：<span class="val">http://localhost:8765/</span>（可选，填上更稳）</li>
+              <li>有效 OAuth 重定向 URI：<span class="val">http://localhost:18765/</span>（可选，填上更稳）</li>
             </ul>
 
             <h4>③ 应用模式 / 角色</h4>
@@ -632,7 +632,7 @@
     </div>
   </section>
 
-  <footer>本机运行 · 数据不出本地 · localhost:8765</footer>
+  <footer>本机运行 · 数据不出本地 · localhost:18765</footer>
 </div>
 
 <div class="toast" id="toast"></div>
