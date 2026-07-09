@@ -15,6 +15,9 @@ SPEC_DIR = SPECPATH
 REPO = os.path.dirname(SPEC_DIR)
 ENTRY = os.path.join(SPEC_DIR, "app_entry.py")
 BACKEND = os.path.join(REPO, "backend")
+# 应用图标（奖杯 logo）：macOS 用 .icns，Windows 用 .ico。均由 packaging/icon.svg 生成。
+ICON_ICNS = os.path.join(SPEC_DIR, "RewardHub.icns")
+ICON_ICO = os.path.join(SPEC_DIR, "RewardHub.ico")
 
 # Playwright 的 driver/数据文件必须全量收集，否则运行时找不到 driver（无法驱动系统浏览器）。
 pw_datas, pw_binaries, pw_hidden = collect_all("playwright")
@@ -64,6 +67,7 @@ exe = EXE(
     name="RewardHub",
     console=False,               # 不弹黑色控制台窗口
     disable_windowed_traceback=False,
+    icon=(ICON_ICNS if sys.platform == "darwin" else ICON_ICO),
 )
 
 coll = COLLECT(
@@ -78,6 +82,7 @@ if sys.platform == "darwin":
     app = BUNDLE(
         coll,
         name="RewardHub.app",
+        icon=ICON_ICNS,
         bundle_identifier="com.yotta.rewardhub",
         info_plist={
             # 后台型工具：双击只是打开浏览器后就退出前台，没必要在 dock 占位 / 跳动。
