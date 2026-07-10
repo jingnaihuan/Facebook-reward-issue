@@ -95,6 +95,9 @@ def _launch_persistent(p, profile, headless):
 HEADLESS_DETECT_WAIT = 9000    # 无窗口下判定「已登录 or 需登录」的最长等待（缩短自 20s）
 VISIBLE_LOGIN_WAIT = 180000    # 可见窗口里等用户完成 SSO 登录的最长时间
 RELOGIN_DETECT_WAIT = 30000    # 登录后无窗口重跑时，等页面就绪的最长时间（登录态已在，通常很快）
+PAGE_GOTO_TIMEOUT = 120000     # goto 只等 domcontentloaded、不等整页 load：页面极重（数百 JS 分包），
+                               # 办公网外 load 常态 15s+，扫码跳转还会拉长导航链，默认 30s+load 必误报；
+                               # 真正的就绪判定交给下方「+增加条件」元素等待，此超时仅兜底断网类故障
 
 _LOGIN_MARK = "+增加条件"       # 该按钮出现 = 已登录且页面就绪
 
@@ -116,7 +119,7 @@ def _attempt(p, url, ids, outdir, headless, login_wait):
     ctx = _launch_persistent(p, profile, headless)
     try:
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
-        page.goto(url)
+        page.goto(url, wait_until="domcontentloaded", timeout=PAGE_GOTO_TIMEOUT)
         # 等应用加载完成（登录成功后「+增加条件」才会出现；元素一出现即返回，不会白等满 login_wait）
         page.get_by_text(_LOGIN_MARK, exact=False).first.wait_for(timeout=login_wait)
         page.wait_for_timeout(1500)
@@ -133,7 +136,7 @@ def _login_only(p, url, login_wait):
     ctx = _launch_persistent(p, profile, headless=False)
     try:
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
-        page.goto(url)
+        page.goto(url, wait_until="domcontentloaded", timeout=PAGE_GOTO_TIMEOUT)
         page.get_by_text(_LOGIN_MARK, exact=False).first.wait_for(timeout=login_wait)
         page.wait_for_timeout(600)
     finally:
