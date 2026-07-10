@@ -271,7 +271,8 @@
   .award-row .seed-wrap.hide { opacity: .3; pointer-events: none; }
   .award-row button.rm { padding: 11px 13px; }
   .award-row input.n-lock { text-align: center; color: var(--muted); background: var(--ink-2, var(--ink)); cursor: default; }
-  .award-row.locked-by-uni { opacity: .38; pointer-events: none; }   /* 选了普惠奖后其他奖项被忽略、置灰 */
+  /* 选了普惠奖后其他奖项被忽略：名称/规则/数量/种子四列置灰不可改，但保留「删除」可点 */
+  .award-row.locked-by-uni > div { opacity: .38; }
   #uniHint { color: var(--gold); margin: -4px 0 10px; }
 
   /* ── Result sheets ── */
@@ -283,6 +284,8 @@
   .badge.inv { background: var(--red-dim); color: var(--red); }
   .sheet-head h3 { font-family: var(--display); font-weight: 700; font-size: 15px; }
   .sheet-head .cnt { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: auto; }
+  .sheet-head .expect { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: 12px; }
+  .sheet-head .expect.short { color: var(--red); font-weight: 600; }   /* 实选不足 → 标红提醒 */
 
   /* ── Misc ── */
   .note { font-size: 12.5px; color: var(--muted); line-height: 1.65; }
@@ -439,7 +442,7 @@
               <li>应用名称随意（如 RewardHub），联系邮箱填自己的</li>
               <li><b>用例 (use case)</b> 必须至少选一个，认准 <b>「管理公共主页的所有内容 / Manage everything on your Page」</b>——<b class="warn">不能随便选</b>：用例决定后台能添加哪些权限，只有这个用例能加上本工具要的三个粉专权限</li>
               <li>若中途提示关联商务资产组合 (business portfolio)，能跳过就跳过，用不到</li>
-              <li>创建完成后<b>最关键一步</b>：进入该用例的 <b>「定制 / Customize」→ 权限 (Permissions)</b>，把这里列出的权限<b class="warn">一次性全部添加 / 启用，一个都不能少</b>（这个用例通常会列出 5 个）。本工具必须用到 <span class="val">pages_show_list</span> <span class="val">pages_read_engagement</span> <span class="val">pages_read_user_content</span>，务必确认都在其中——<b>别等登录报 Invalid Scopes 错误再回来补</b>。</li>
+              <li>创建完成后<b>最关键一步</b>：进入该用例的 <b>「定制 / Customize」→ 权限 (Permissions)</b>，把 <span class="val">pages_show_list</span> <span class="val">pages_read_engagement</span> <span class="val">pages_read_user_content</span> <b class="warn">这三个一次性全部添加 / 启用，缺一个都不行</b>——别等登录报 <span class="val">Invalid Scopes</span> 错误再回来补。</li>
               <li>回到应用面板，顶部的 <b>App ID</b> 就是左边输入框要填的那串数字</li>
             </ul>
 
@@ -1299,7 +1302,8 @@ function addAwardRow(preset) {
   row._isUniversal = isUni;
   row._setLockedByOther = (locked) => {
     row.classList.toggle("locked-by-uni", locked);
-    [ruleSel, nIn, seedIn, delBtn].forEach(el => el.disabled = locked);
+    // 被普惠奖忽略的行：名称/规则/数量/种子全部锁定，但「删除」保持可用（用户可移除多余奖项）
+    [ruleSel, nIn, seedIn].forEach(el => el.disabled = locked);
     nameIn.disabled = locked || isUni();   // 普惠奖行名称恒锁定，不被「解锁其他行」逻辑清掉
   };
   row._get = () => {
@@ -1336,6 +1340,7 @@ $("btnProcess").onclick = async () => {
   }
   const note = $("procNote"); note.className = "note"; note.textContent = "结算中…";
   const btn = $("btnProcess"); btn.disabled = true;
+  state.lastAwards = awards;      // 记住本次配置，供预览对比「应选 N vs 实选人数」
   const payload = {
     raw_comments: state.raw,
     players: state.players,
@@ -1349,7 +1354,8 @@ $("btnProcess").onclick = async () => {
     state.result = res;
     renderResults(res);
     $("btnExport").disabled = false;
-    note.className = "flash ok"; note.textContent = "结算完成，可预览各奖项名单并导出。";
+    note.className = "flash ok";
+    note.textContent = "结算完成，可预览各奖项名单并导出。" + (res.log_path ? "（本次结算已存档，可事后查证）" : "");
     toast("结算完成", "ok");
   } catch (e) {
     note.className = "flash err"; note.textContent = "结算失败：" + e.message;
@@ -1382,9 +1388,12 @@ function invalidTable(list) {
 
 function renderResults(res) {
   const box = $("results"); clear(box);
+  // 本次每个奖项要选多少（应选 N），用于和实选人数对比，把「池子不够/数量填错」这类哑故障标红
+  const wanted = {};
+  (state.lastAwards || []).forEach(a => { wanted[a.name] = a.n; });
   Object.keys(res.awards).forEach(name => {
     const list = res.awards[name];
-    box.appendChild(sheet("award","奖项", name, list.length, playerTable(list)));
+    box.appendChild(sheet("award","奖项", name, list.length, playerTable(list), wanted[name]));
   });
   // 普惠奖模式（无任何抽选奖项）→ 这些人是发奖对象，标为「普惠奖（全员）」；否则是抽奖落选的「参与奖」
   const universal = Object.keys(res.awards).length === 0;
@@ -1393,13 +1402,17 @@ function renderResults(res) {
     res.participation.length, playerTable(res.participation)));
   box.appendChild(sheet("inv","无效","无效名单", res.invalid.length, invalidTable(res.invalid)));
 }
-function sheet(kind, badgeTxt, title, cnt, tableNode) {
-  return h("div",{class:"sheet"},
-    h("div",{class:"sheet-head"},
-      h("span",{class:"badge "+kind}, badgeTxt),
-      h("h3",null,title),
-      h("span",{class:"cnt"}, cnt + " 人")),
-    tableNode);
+function sheet(kind, badgeTxt, title, cnt, tableNode, expected) {
+  const head = h("div",{class:"sheet-head"},
+    h("span",{class:"badge "+kind}, badgeTxt),
+    h("h3",null,title),
+    h("span",{class:"cnt"}, cnt + " 人"));
+  if (expected != null) {   // 抽选奖项：并排显示应选 N；实选不足（有效池不够）则标红
+    const short = cnt < expected;
+    head.appendChild(h("span",{class:"expect" + (short ? " short" : "")},
+      short ? ("应选 " + expected + "，实选 " + cnt + " · 有效池不足") : ("应选 " + expected)));
+  }
+  return h("div",{class:"sheet"}, head, tableNode);
 }
 
 $("btnExport").onclick = async () => {

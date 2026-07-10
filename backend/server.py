@@ -135,6 +135,37 @@ def process_pipeline(raw_comments, players, dedup_strategy, target_langs, awards
     return {"awards": result, "participation": remaining, "invalid": invalid}
 
 
+def write_run_log(inputs, out):
+    """每次结算落一份运行日志（时间/规则/种子/各名单）到工作区「结算日志」目录，
+    供事后查证「某次发奖到底选了谁」。任何异常都不得影响发奖本身，故整体兜底。
+    返回写入路径，失败返回 None。"""
+    try:
+        awards_cfg = inputs.get("awards") or []
+        universal = not awards_cfg          # 空奖项 = 普惠奖（全员）
+        part_label = "普惠奖（全员）" if universal else "参与奖（未中奖）"
+        now = datetime.datetime.now()
+        rec = {
+            "时间": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "模式": "普惠奖（全员）" if universal else "抽选",
+            "去重策略": inputs.get("dedup_strategy", "earliest"),
+            "目标语言": inputs.get("target_langs", []),
+            "奖项配置": awards_cfg,          # 每项含 name / rule / n / seed（随机时）
+            "各奖项中奖": {name: [w.get("player_id") for w in winners]
+                          for name, winners in out["awards"].items()},
+            part_label: [p.get("player_id") for p in out["participation"]],
+            "无效": [{"player_id": r.get("player_id", ""), "原因": r.get("reject_reason", "")}
+                    for r in out["invalid"]],
+        }
+        logdir = os.path.join(common.work_dir(), "结算日志")
+        os.makedirs(logdir, exist_ok=True)
+        path = os.path.join(logdir, "结算-%s.json" % now.strftime("%Y%m%d-%H%M%S"))
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(rec, f, ensure_ascii=False, indent=2)
+        return path
+    except Exception:
+        return None
+
+
 class Handler(BaseHTTPRequestHandler):
     def _json(self, obj, code=200):
         body = json.dumps(obj, ensure_ascii=False, default=str).encode("utf-8")
@@ -199,7 +230,8 @@ class Handler(BaseHTTPRequestHandler):
                     b["raw_comments"], b.get("players", {}),
                     b.get("dedup_strategy", "earliest"),
                     b.get("target_langs", ["en"]), b.get("awards", []))
-                self._json({"ok": True, **out})
+                log_path = write_run_log(b, out)      # 落审计日志，不影响返回
+                self._json({"ok": True, "log_path": log_path, **out})
             elif self.path == "/api/export":
                 b = self._body()
                 default_name = "发奖名单-%s.xlsx" % datetime.datetime.now().strftime("%Y%m%d")
