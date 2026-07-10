@@ -434,10 +434,10 @@
             <ul>
               <li>到 <b>developers.facebook.com</b> 用你的 Facebook 账号登录（首次会引导注册成开发者）→ 右上「我的应用」→ <b>创建应用</b></li>
               <li>应用名称随意（如 RewardHub），联系邮箱填自己的</li>
-              <li>选<b>用例 (use case)</b> 时选 <b>「其他 / Other」</b>——<b class="warn">不要选</b>「验证用户身份并请求数据」「管理公共主页」等现成用例，那些配的是企业版登录，本工具用不了</li>
-              <li>应用类型选 <b>「消费者 / Consumer」</b>——<b class="warn">不要选「商务 / Business」</b>：商务类只有「企业版 Facebook 登录」（要走 config_id），与本工具的登录方式不兼容；消费者类才有经典「Facebook 登录」</li>
-              <li>若中途提示关联商务资产组合 (business portfolio)，跳过即可，用不到</li>
-              <li>创建完成后进入应用面板，顶部的 <b>App ID</b> 就是左边输入框要填的那串数字</li>
+              <li><b>用例 (use case)</b> 必须至少选一个，认准 <b>「管理公共主页的所有内容 / Manage everything on your Page」</b>——<b class="warn">不能随便选</b>：用例决定后台能添加哪些权限，只有这个用例能加上本工具要的三个粉专权限</li>
+              <li>若中途提示关联商务资产组合 (business portfolio)，能跳过就跳过，用不到</li>
+              <li>创建完成后关键一步：进入该用例的 <b>「定制 / Customize」→ 权限 (Permissions)</b>，把 <span class="val">pages_show_list</span> <span class="val">pages_read_engagement</span> <span class="val">pages_read_user_content</span> 三个权限逐个点「添加」——<b class="warn">漏加的话登录时拿不到权限</b>，抓取会失败</li>
+              <li>回到应用面板，顶部的 <b>App ID</b> 就是左边输入框要填的那串数字</li>
             </ul>
 
             <p>接着在 <b>developers.facebook.com → 你的 App</b> 后台做以下设置（一次性）：</p>
@@ -454,7 +454,7 @@
               <li>JavaScript SDK 允许域名：<span class="val">http://localhost:18765</span></li>
               <li>客户端 / 网页 OAuth 登录 = <b>是</b></li>
               <li>有效 OAuth 重定向 URI：<span class="val">http://localhost:18765/</span>（可选，填上更稳）</li>
-              <li>产品列表里只有「企业版 Facebook 登录」、找不到经典「Facebook 登录」？说明 App 类型建成了商务——回 ① 重建一个消费者类型的</li>
+              <li>左侧产品列表里找不到「Facebook 登录」的设置入口？到用例的「定制 / Customize」里找「设置 (Settings)」，是同一组配置</li>
             </ul>
 
             <h4>④ 应用模式 / 角色</h4>
@@ -464,7 +464,7 @@
             </ul>
 
             <h4>⑤ 权限</h4>
-            <p>本工具登录时会自动请求 <span class="val">pages_show_list</span> <span class="val">pages_read_engagement</span> <span class="val">pages_read_user_content</span> 三个权限，无需在后台预先申请。开发模式 + App 角色成员 + 只读自己管理的粉专 → 属标准访问，无需 App Review。</p>
+            <p>在 ① 的用例定制里添加好的 <span class="val">pages_show_list</span> <span class="val">pages_read_engagement</span> <span class="val">pages_read_user_content</span> 三个权限，登录时本工具会自动向你请求授权，点同意即可。开发模式 + App 角色成员 + 只读自己管理的粉专 → 属标准访问，无需 App Review。</p>
 
             <h4>使用流程</h4>
             <ol>
