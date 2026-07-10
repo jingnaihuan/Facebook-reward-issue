@@ -30,7 +30,10 @@ def export_reward_workbook(path, awards, participation, invalid):
     wb.remove(wb.active)
     for name, winners in awards.items():
         _write_player_sheet(wb.create_sheet(title=name[:31]), winners)
-    _write_player_sheet(wb.create_sheet(title="参与奖"), participation)
+    # 无任何抽选奖项 = 普惠奖（全员）：这些人是发奖对象，工作簿名标清；
+    # 有抽选奖项时，这一档是落选者的「参与奖」。
+    part_title = "普惠奖（全员）" if not awards else "参与奖"
+    _write_player_sheet(wb.create_sheet(title=part_title), participation)
     _write_invalid_sheet(wb.create_sheet(title="无效"), invalid)
     wb.save(path)
     return path

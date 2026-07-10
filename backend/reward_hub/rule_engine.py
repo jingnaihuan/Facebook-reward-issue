@@ -39,6 +39,11 @@ def run_awards(rows, awards):
         rule = _RULES.get(a["rule"])
         if rule is None:
             raise ValueError("未知规则: %s" % a["rule"])
+        # 数量必须是正整数：拦住「数量为 0/空」这类会算出错误名单的输入（前端也拦，这里是第二道防线）。
+        # 全员发放请走「普惠奖」= 不传任何奖项(awards 为空)，不会进入此循环。
+        n = a.get("n")
+        if not isinstance(n, int) or isinstance(n, bool) or n <= 0:
+            raise ValueError("奖项「%s」的数量必须为大于 0 的整数" % a.get("name", "?"))
         winners = rule(pool, a)
         result[a["name"]] = winners
         won_ids = {w["player_id"] for w in winners}

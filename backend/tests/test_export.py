@@ -33,6 +33,22 @@ def test_award_sheet_header_and_row(tmp_path):
     assert ws.cell(row=2, column=3).value == "1000000001"  # 玩家ID 列
 
 
+def test_universal_names_participation_sheet(tmp_path):
+    """普惠奖（awards 为空）时，全员这一档工作簿名为「普惠奖（全员）」，且不含任何奖项 sheet。"""
+    out = tmp_path / "out.xlsx"
+    export_reward_workbook(str(out), {}, [_p("1000000001", 1), _p("1000000002", 2)], [])
+    wb = openpyxl.load_workbook(str(out))
+    assert wb.sheetnames == ["普惠奖（全员）", "无效"]
+
+
+def test_normal_mode_keeps_participation_name(tmp_path):
+    """有抽选奖项时，落选档仍叫「参与奖」（不改动既有正常发奖行为）。"""
+    out = tmp_path / "out.xlsx"
+    export_reward_workbook(str(out), {"先锋奖": [_p("1000000001", 1)]}, [_p("1000000002", 2)], [])
+    wb = openpyxl.load_workbook(str(out))
+    assert wb.sheetnames == ["先锋奖", "参与奖", "无效"]
+
+
 def test_invalid_sheet_has_reason_column(tmp_path):
     out = tmp_path / "out.xlsx"
     invalid = [{"player_id": "", "content": "hi", "reject_reason": "无有效ID"}]

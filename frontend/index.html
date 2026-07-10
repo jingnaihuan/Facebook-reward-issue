@@ -270,6 +270,9 @@
   .award-row .seed-wrap { transition: opacity .18s; }
   .award-row .seed-wrap.hide { opacity: .3; pointer-events: none; }
   .award-row button.rm { padding: 11px 13px; }
+  .award-row input.n-lock { text-align: center; color: var(--muted); background: var(--ink-2, var(--ink)); cursor: default; }
+  .award-row.locked-by-uni { opacity: .38; pointer-events: none; }   /* 选了普惠奖后其他奖项被忽略、置灰 */
+  #uniHint { color: var(--gold); margin: -4px 0 10px; }
 
   /* ── Result sheets ── */
   .sheet { margin-bottom: 20px; }
@@ -436,7 +439,7 @@
               <li>应用名称随意（如 RewardHub），联系邮箱填自己的</li>
               <li><b>用例 (use case)</b> 必须至少选一个，认准 <b>「管理公共主页的所有内容 / Manage everything on your Page」</b>——<b class="warn">不能随便选</b>：用例决定后台能添加哪些权限，只有这个用例能加上本工具要的三个粉专权限</li>
               <li>若中途提示关联商务资产组合 (business portfolio)，能跳过就跳过，用不到</li>
-              <li>创建完成后关键一步：进入该用例的 <b>「定制 / Customize」→ 权限 (Permissions)</b>，把 <span class="val">pages_show_list</span> <span class="val">pages_read_engagement</span> <span class="val">pages_read_user_content</span> 三个权限逐个点「添加」——<b class="warn">漏加的话登录时拿不到权限</b>，抓取会失败</li>
+              <li>创建完成后<b>最关键一步</b>：进入该用例的 <b>「定制 / Customize」→ 权限 (Permissions)</b>，把这里列出的权限<b class="warn">一次性全部添加 / 启用，一个都不能少</b>（这个用例通常会列出 5 个）。本工具必须用到 <span class="val">pages_show_list</span> <span class="val">pages_read_engagement</span> <span class="val">pages_read_user_content</span>，务必确认都在其中——<b>别等登录报 Invalid Scopes 错误再回来补</b>。</li>
               <li>回到应用面板，顶部的 <b>App ID</b> 就是左边输入框要填的那串数字</li>
             </ul>
 
@@ -444,8 +447,8 @@
 
             <h4>② 设置 → 基本 (Settings · Basic)</h4>
             <ul>
-              <li>应用域名 (App Domains)：填 <span class="val">localhost</span></li>
               <li>底部「+ 添加平台」→ 选「网站」→ 站点网址 <span class="val">http://localhost:18765/</span></li>
+              <li>应用域名 (App Domains) 不用填——它要求带 .com/.org 之类后缀、不接受纯 <span class="val">localhost</span>，留空也能正常抓取。</li>
             </ul>
 
             <h4>③ 产品加「Facebook 登录」→ 设置</h4>
@@ -453,7 +456,7 @@
               <li>使用 JavaScript SDK 登录 = <b>是</b></li>
               <li>JavaScript SDK 允许域名：<span class="val">http://localhost:18765</span></li>
               <li>客户端 / 网页 OAuth 登录 = <b>是</b></li>
-              <li>有效 OAuth 重定向 URI：<span class="val">http://localhost:18765/</span>（可选，填上更稳）</li>
+              <li>有效 OAuth 重定向 URI 不用填——开发模式下 <span class="val">http://localhost</span> 的跳转会自动放行（后台也会这么提示），留空即可。</li>
               <li>左侧产品列表里找不到「Facebook 登录」的设置入口？到用例的「定制 / Customize」里找「设置 (Settings)」，是同一组配置</li>
             </ul>
 
@@ -632,6 +635,7 @@
       <div class="step-head"><span class="no">STEP 05</span><h2>发奖规则 + 导出</h2><span class="hint">奖项按序结算，中奖者不重复（不存入预设）</span></div>
 
       <div id="awardList"></div>
+      <div id="uniHint" class="note" style="display:none;">已选「普惠奖（全员）」：将忽略其他奖项，所有经过前四步筛选的有效参与者都会进入发奖名单。</div>
       <button class="btn-ghost btn-sm" id="btnAddAward" style="margin-top:4px;">+ 添加奖项</button>
 
       <div class="divider"></div>
@@ -1244,12 +1248,22 @@ $("btnDownload").onclick = async () => {
 };
 
 /* ═══════════ STEP 5：发奖规则 ═══════════ */
+const UNIVERSAL = "universal";        // 普惠奖：不抽选、全员发放（= 不设任何奖项，后端空 awards 即此语义）
 const RULES = [
   {v:"top_floors", t:"前 N 楼"},
   {v:"top_likes", t:"点赞最高 N"},
   {v:"top_replies", t:"回复最高 N"},
   {v:"random_pick", t:"随机抽 N"},
+  {v:UNIVERSAL, t:"普惠奖（全员）"},
 ];
+// 普惠奖独占：任一行选了普惠奖，则其他奖项行 + 「添加奖项」全部置灰忽略。
+function refreshUniversalMode() {
+  const rows = [...$("awardList").children];
+  const uni = rows.some(r => r._isUniversal());
+  rows.forEach(r => r._setLockedByOther(uni && !r._isUniversal()));
+  $("btnAddAward").disabled = uni;
+  $("uniHint").style.display = uni ? "" : "none";
+}
 function addAwardRow(preset) {
   preset = preset || {};
   const ruleSel = h("select", null, ...RULES.map(r => h("option",{value:r.v},r.t)));
@@ -1257,34 +1271,69 @@ function addAwardRow(preset) {
   const nameIn = h("input",{type:"text",value:preset.name||("奖项 "+($("awardList").children.length+1)), placeholder:"奖项名称"});
   const nIn = h("input",{type:"number",value:preset.n||3});
   nIn.min = 1;
+  const nLock = h("input",{type:"text",value:"全员",class:"n-lock"});   // 普惠奖时替换数量输入框，显示「全员」
+  nLock.readOnly = true; nLock.style.display = "none";
   const seedIn = h("input",{type:"number",value:preset.seed!=null?preset.seed:42});
   const seedWrap = h("div",{class:"seed-wrap"}, h("label",{class:"fld"},"随机种子"), seedIn);
-  const syncSeed = () => seedWrap.classList.toggle("hide", ruleSel.value !== "random_pick");
-  ruleSel.onchange = syncSeed;
+  const delBtn = h("button",{class:"btn-danger rm"}, "删除");
   const row = h("div",{class:"award-row"},
     h("div",null, h("label",{class:"fld"},"奖项名称"), nameIn),
     h("div",null, h("label",{class:"fld"},"规则"), ruleSel),
-    h("div",null, h("label",{class:"fld"},"数量 N"), nIn),
+    h("div",null, h("label",{class:"fld"},"数量 N"), nIn, nLock),
     seedWrap,
-    h("button",{class:"btn-danger rm", onclick:()=>row.remove()}, "删除")
+    delBtn
   );
+  const isUni = () => ruleSel.value === UNIVERSAL;
+  // 普惠奖：名称固定「普惠奖」、数量显示「全员」、随机种子隐藏，三者锁定不可改（规则下拉保持可改以便切回）
+  const sync = () => {
+    const uni = isUni();
+    nIn.style.display = uni ? "none" : "";
+    nLock.style.display = uni ? "" : "none";
+    seedWrap.classList.toggle("hide", uni || ruleSel.value !== "random_pick");
+    if (uni) { if (nameIn.dataset.prev == null) nameIn.dataset.prev = nameIn.value; nameIn.value = "普惠奖"; }
+    else if (nameIn.dataset.prev != null) { nameIn.value = nameIn.dataset.prev; delete nameIn.dataset.prev; }
+    nameIn.disabled = uni;
+  };
+  ruleSel.onchange = () => { sync(); refreshUniversalMode(); };
+  delBtn.onclick = () => { row.remove(); refreshUniversalMode(); };
+  row._isUniversal = isUni;
+  row._setLockedByOther = (locked) => {
+    row.classList.toggle("locked-by-uni", locked);
+    [ruleSel, nIn, seedIn, delBtn].forEach(el => el.disabled = locked);
+    nameIn.disabled = locked || isUni();   // 普惠奖行名称恒锁定，不被「解锁其他行」逻辑清掉
+  };
   row._get = () => {
-    const a = { name: nameIn.value.trim()||"未命名奖项", rule: ruleSel.value, n: parseInt(nIn.value,10)||1 };
+    const a = { name: nameIn.value.trim()||"未命名奖项", rule: ruleSel.value, n: parseInt(nIn.value,10) };
     if (ruleSel.value === "random_pick") a.seed = parseInt(seedIn.value,10)||0;
     return a;
   };
   $("awardList").appendChild(row);
-  syncSeed();
+  sync();
+  refreshUniversalMode();
 }
 $("btnAddAward").onclick = () => addAwardRow();
 addAwardRow({name:"盖楼奖", rule:"top_floors", n:5});   // 初始一行
 
+function isUniversalMode() { return [...$("awardList").children].some(r => r._isUniversal()); }
 function collectAwards() { return [...$("awardList").children].map(r => r._get()); }
 
 $("btnProcess").onclick = async () => {
   if (!state.raw.length) { toast("请先在第 1 步导入留言", "err"); gotoStep(1); return; }
-  const awards = collectAwards();
-  if (!awards.length) { toast("请至少添加一个奖项", "err"); return; }
+  let awards;
+  if (isUniversalMode()) {
+    awards = [];          // 普惠奖：不设抽选，全部有效参与者进「普惠奖（全员）」名单
+  } else {
+    awards = collectAwards();
+    if (!awards.length) { toast("请至少添加一个奖项", "err"); return; }
+    const bad = awards.find(a => !Number.isInteger(a.n) || a.n <= 0);
+    if (bad) {   // 拦住「非普惠规则 + 数量为 0/空」——否则会算出一份看似正常实则错误的名单
+      const msg = "「" + bad.name + "」的数量 N 必须大于 0。请填写正确的数量；" +
+                  "若想给全部有效参与者发奖，请在「规则」里选择「普惠奖（全员）」。";
+      const nt = $("procNote"); nt.className = "flash err"; nt.textContent = msg;
+      toast("数量 N 不能为 0", "err");
+      return;
+    }
+  }
   const note = $("procNote"); note.className = "note"; note.textContent = "结算中…";
   const btn = $("btnProcess"); btn.disabled = true;
   const payload = {
@@ -1337,7 +1386,11 @@ function renderResults(res) {
     const list = res.awards[name];
     box.appendChild(sheet("award","奖项", name, list.length, playerTable(list)));
   });
-  box.appendChild(sheet("part","参与奖","参与奖（未中奖）", res.participation.length, playerTable(res.participation)));
+  // 普惠奖模式（无任何抽选奖项）→ 这些人是发奖对象，标为「普惠奖（全员）」；否则是抽奖落选的「参与奖」
+  const universal = Object.keys(res.awards).length === 0;
+  box.appendChild(sheet("part", universal ? "普惠" : "参与奖",
+    universal ? "普惠奖（全员）" : "参与奖（未中奖）",
+    res.participation.length, playerTable(res.participation)));
   box.appendChild(sheet("inv","无效","无效名单", res.invalid.length, invalidTable(res.invalid)));
 }
 function sheet(kind, badgeTxt, title, cnt, tableNode) {
