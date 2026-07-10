@@ -430,30 +430,41 @@
           <div class="help-body">
             <p><b>最关键：</b>用 <span class="val">http://localhost:18765</span> 打开本页，<b class="warn">不要用 127.0.0.1</b>——FB 的应用域名不接受 IP，用 IP 一定登录失败。双击「启动.command」现已自动用 localhost。</p>
 
-            <p>以下在 <b>developers.facebook.com → 你的 App</b> 里设置（一次性）：</p>
+            <h4>① 创建自己的 Facebook App（已有就跳过这步）</h4>
+            <ul>
+              <li>到 <b>developers.facebook.com</b> 用你的 Facebook 账号登录（首次会引导注册成开发者）→ 右上「我的应用」→ <b>创建应用</b></li>
+              <li>应用名称随意（如 RewardHub），联系邮箱填自己的</li>
+              <li>选<b>用例 (use case)</b> 时选 <b>「其他 / Other」</b>——<b class="warn">不要选</b>「验证用户身份并请求数据」「管理公共主页」等现成用例，那些配的是企业版登录，本工具用不了</li>
+              <li>应用类型选 <b>「消费者 / Consumer」</b>——<b class="warn">不要选「商务 / Business」</b>：商务类只有「企业版 Facebook 登录」（要走 config_id），与本工具的登录方式不兼容；消费者类才有经典「Facebook 登录」</li>
+              <li>若中途提示关联商务资产组合 (business portfolio)，跳过即可，用不到</li>
+              <li>创建完成后进入应用面板，顶部的 <b>App ID</b> 就是左边输入框要填的那串数字</li>
+            </ul>
 
-            <h4>① 设置 → 基本 (Settings · Basic)</h4>
+            <p>接着在 <b>developers.facebook.com → 你的 App</b> 后台做以下设置（一次性）：</p>
+
+            <h4>② 设置 → 基本 (Settings · Basic)</h4>
             <ul>
               <li>应用域名 (App Domains)：填 <span class="val">localhost</span></li>
               <li>底部「+ 添加平台」→ 选「网站」→ 站点网址 <span class="val">http://localhost:18765/</span></li>
             </ul>
 
-            <h4>② 产品加「Facebook 登录」→ 设置</h4>
+            <h4>③ 产品加「Facebook 登录」→ 设置</h4>
             <ul>
               <li>使用 JavaScript SDK 登录 = <b>是</b></li>
               <li>JavaScript SDK 允许域名：<span class="val">http://localhost:18765</span></li>
               <li>客户端 / 网页 OAuth 登录 = <b>是</b></li>
               <li>有效 OAuth 重定向 URI：<span class="val">http://localhost:18765/</span>（可选，填上更稳）</li>
+              <li>产品列表里只有「企业版 Facebook 登录」、找不到经典「Facebook 登录」？说明 App 类型建成了商务——回 ① 重建一个消费者类型的</li>
             </ul>
 
-            <h4>③ 应用模式 / 角色</h4>
+            <h4>④ 应用模式 / 角色</h4>
             <ul>
-              <li>开发模式即可（你是管理员可直接用）。</li>
-              <li>让同事也用：把他们加为 App 的「测试人员 / 开发者」；或把 App 上线（上线需对 <span class="val">pages_read_user_content</span> 等做 App Review + 商家验证）。</li>
+              <li>保持<b>开发模式</b>即可（你是 App 管理员，直接能用）。<b class="warn">别尝试把 App 上线</b>：上线要对 <span class="val">pages_read_user_content</span> 等权限做 App Review + 商家验证，内部小工具过不了审，也完全没必要——开发模式就是长期形态。</li>
+              <li>让同事也用，两个条件缺一不可：⑴ 应用面板「应用角色」里把同事的 FB 账号加为「测试人员 / 开发者」（对方需接受邀请）；⑵ 同事本人得是目标粉专的管理员 / 编辑——不然授权成功也读不到粉专数据。</li>
             </ul>
 
-            <h4>④ 权限</h4>
-            <p>已申请 <span class="val">pages_show_list</span> <span class="val">pages_read_engagement</span> <span class="val">pages_read_user_content</span>。开发模式 + 管理员 + 只读自管粉专 → 属标准访问，无需审核。</p>
+            <h4>⑤ 权限</h4>
+            <p>本工具登录时会自动请求 <span class="val">pages_show_list</span> <span class="val">pages_read_engagement</span> <span class="val">pages_read_user_content</span> 三个权限，无需在后台预先申请。开发模式 + App 角色成员 + 只读自己管理的粉专 → 属标准访问，无需 App Review。</p>
 
             <h4>使用流程</h4>
             <ol>
