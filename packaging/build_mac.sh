@@ -5,7 +5,16 @@ set -e
 cd "$(dirname "$0")/.."
 
 VENV="${REWARD_BUILD_VENV:-.build_venv}"
-python3 -m venv "$VENV"
+# ⚠️ 复用已存在的构建 venv，绝不覆写重建：Apple 芯片(M1/M2)上重跑 `python3 -m venv` 会用本机
+#    arm64 python 覆盖既有 x86_64 venv，把分发架构从 x86_64 翻成 arm64（见 memory/2026-07-10）。
+#    需要从头重建（换机、venv 损坏、升级依赖）时显式设 REWARD_BUILD_RECREATE=1。
+if [ -n "$REWARD_BUILD_RECREATE" ] || [ ! -x "$VENV/bin/python" ]; then
+    rm -rf "$VENV"
+    python3 -m venv "$VENV"
+else
+    echo "复用已存在构建 venv：$VENV（如需从头重建：REWARD_BUILD_RECREATE=1 bash packaging/build_mac.sh）"
+fi
+# pip 安装始终对该 venv 自身的解释器执行（幂等），不会翻转架构。
 "$VENV/bin/python" -m pip install --upgrade pip
 "$VENV/bin/python" -m pip install pyinstaller playwright openpyxl
 
