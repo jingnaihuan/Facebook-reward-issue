@@ -49,6 +49,17 @@ def test_normal_mode_keeps_participation_name(tmp_path):
     assert wb.sheetnames == ["先锋奖", "参与奖", "无效"]
 
 
+def test_participation_sheet_labeled_when_winners_included(tmp_path):
+    """开「中奖者可重复领参与奖」时，参与奖 sheet 标题标注「含中奖者」，
+    避免拿到 xlsx 的人误以为参与奖里都是未中奖者。"""
+    out = tmp_path / "out.xlsx"
+    export_reward_workbook(str(out), {"先锋奖": [_p("1000000001", 1)]},
+                           [_p("1000000001", 1), _p("1000000002", 2)], [],
+                           allow_winner_participation=True)
+    wb = openpyxl.load_workbook(str(out))
+    assert wb.sheetnames == ["先锋奖", "参与奖（含中奖者）", "无效"]
+
+
 def test_invalid_sheet_has_reason_column(tmp_path):
     out = tmp_path / "out.xlsx"
     invalid = [{"player_id": "", "content": "hi", "reject_reason": "无有效ID"}]

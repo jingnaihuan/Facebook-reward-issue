@@ -10,7 +10,7 @@
 
 默认无窗口(headless)运行；若未登录/登录过期，自动弹出可见浏览器，人工登录后 profile 持久化。
 """
-import os, sys, re, argparse
+import os, sys, re, argparse, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 try:
     from reward_hub.common import emit, app_data_dir, work_dir, force_utf8_std
@@ -92,14 +92,47 @@ def _launch_persistent(p, profile, headless):
 
 
 # 检测/等待时长（毫秒），集中在此便于调整：
-HEADLESS_DETECT_WAIT = 9000    # 无窗口下判定「已登录 or 需登录」的最长等待（缩短自 20s）
+HEADLESS_DETECT_WAIT = 60000   # 无窗口首探等页面就绪的上限。慢机器/慢网下页面渲染可能 30s+，
+                               # 太短会把「已登录但慢」误判成需登录、每次白弹登录窗。
+                               # 配合 _wait_ready_or_login：真跳去登录页会提前返回，不会空等满这个上限。
 VISIBLE_LOGIN_WAIT = 180000    # 可见窗口里等用户完成 SSO 登录的最长时间
-RELOGIN_DETECT_WAIT = 30000    # 登录后无窗口重跑时，等页面就绪的最长时间（登录态已在，通常很快）
+RELOGIN_DETECT_WAIT = 120000   # 登录后无窗口重跑时等页面就绪的上限。原 30s 在慢机器上不够（页面渲染
+                               # 出「+增加条件」可达 30s~180s），会误报「拉取失败：Timeout 30000ms」。
 PAGE_GOTO_TIMEOUT = 120000     # goto 只等 domcontentloaded、不等整页 load：页面极重（数百 JS 分包），
                                # 办公网外 load 常态 15s+，扫码跳转还会拉长导航链，默认 30s+load 必误报；
                                # 真正的就绪判定交给下方「+增加条件」元素等待，此超时仅兜底断网类故障
 
 _LOGIN_MARK = "+增加条件"       # 该按钮出现 = 已登录且页面就绪
+_PLAYER_PAGE_MARK = "player-management"   # 已登录且停在玩家管理页时 URL 应含此段
+
+
+def _looks_like_login(page):
+    """页面已离开玩家管理页（被重定向到登录/SSO）= 需要登录。
+    只用 URL 判断，不依赖登录页具体结构（不同 SSO 不一样）；即使判错也只是退回弹登录窗的
+    老行为，不影响发奖名单正确性。实机若登录页 URL 仍含 player-management 可在此微调。"""
+    try:
+        return _PLAYER_PAGE_MARK not in (page.url or "")
+    except Exception:
+        return False
+
+
+def _wait_ready_or_login(page, timeout):
+    """轮询等待，返回 True=页面已就绪（出现「+增加条件」），False=需要登录/超时。
+    仍停在玩家管理页就继续等（页面重、渲染慢，不能只给固定短超时）；一旦被重定向到登录页
+    立即返回 False；到 timeout 仍未就绪也返回 False（兜底转登录流程）。"""
+    mark = page.get_by_text(_LOGIN_MARK, exact=False)
+    end = time.time() + max(0, timeout) / 1000.0
+    while True:
+        try:
+            if mark.first.is_visible():
+                return True
+        except Exception:
+            pass
+        if _looks_like_login(page):
+            return False
+        if time.time() >= end:
+            return False
+        page.wait_for_timeout(500)
 
 
 def _is_no_browser(err):
@@ -120,8 +153,10 @@ def _attempt(p, url, ids, outdir, headless, login_wait):
     try:
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         page.goto(url, wait_until="domcontentloaded", timeout=PAGE_GOTO_TIMEOUT)
-        # 等应用加载完成（登录成功后「+增加条件」才会出现；元素一出现即返回，不会白等满 login_wait）
-        page.get_by_text(_LOGIN_MARK, exact=False).first.wait_for(timeout=login_wait)
+        # 等页面就绪（出现「+增加条件」）或判定需登录：慢页面会耐心等到 login_wait 上限，
+        # 一旦被重定向到登录页则提前返回，不空等。
+        if not _wait_ready_or_login(page, login_wait):
+            raise RuntimeError("页面未就绪：可能需要登录或加载超时")
         page.wait_for_timeout(1500)
         return _search_and_export(page, ids, outdir)
     finally:

@@ -635,11 +635,16 @@
   <!-- ══════════ STEP 5 ══════════ -->
   <section class="step" data-step="5">
     <div class="card">
-      <div class="step-head"><span class="no">STEP 05</span><h2>发奖规则 + 导出</h2><span class="hint">奖项按序结算，中奖者不重复（不存入预设）</span></div>
+      <div class="step-head"><span class="no">STEP 05</span><h2>发奖规则 + 导出</h2><span class="hint">奖项按序结算（不存入预设）</span></div>
 
       <div id="awardList"></div>
       <div id="uniHint" class="note" style="display:none;">已选「普惠奖（全员）」：将忽略其他奖项，所有经过前四步筛选的有效参与者都会进入发奖名单。</div>
       <button class="btn-ghost btn-sm" id="btnAddAward" style="margin-top:4px;">+ 添加奖项</button>
+
+      <div id="repeatPartWrap" style="margin-top:15px; display:flex; align-items:center; gap:11px; flex-wrap:wrap;">
+        <label class="chip" id="repeatPartChip"><input type="checkbox" id="allowWinnerPart" /> <span>被抽选中奖者也可领参与奖</span></label>
+        <span class="note" id="repeatPartNote">默认关闭：中奖者不进参与奖。开启后中奖者会同时出现在「抽选奖」和「参与奖」名单。</span>
+      </div>
 
       <div class="divider"></div>
       <div class="row">
@@ -1266,7 +1271,21 @@ function refreshUniversalMode() {
   rows.forEach(r => r._setLockedByOther(uni && !r._isUniversal()));
   $("btnAddAward").disabled = uni;
   $("uniHint").style.display = uni ? "" : "none";
+  // 普惠奖（全员）无抽选，「中奖者可重复领参与奖」开关无意义 → 置灰禁用（不清空，切回抽选时保留选择）
+  $("allowWinnerPart").disabled = uni;
+  $("repeatPartWrap").style.opacity = uni ? ".4" : "";
+  $("repeatPartChip").style.pointerEvents = uni ? "none" : "";
 }
+function syncRepeatPartChip() {
+  $("repeatPartChip").classList.toggle("on", $("allowWinnerPart").checked);
+}
+$("allowWinnerPart").addEventListener("change", syncRepeatPartChip);
+// 开启时用醒目文案提示会改变参与奖构成
+$("allowWinnerPart").addEventListener("change", () => {
+  $("repeatPartNote").textContent = $("allowWinnerPart").checked
+    ? "已开启：参与奖 = 全体有效参与者（含中奖者），中奖者会同时出现在两处名单。"
+    : "默认关闭：中奖者不进参与奖。开启后中奖者会同时出现在「抽选奖」和「参与奖」名单。";
+});
 function addAwardRow(preset) {
   preset = preset || {};
   const ruleSel = h("select", null, ...RULES.map(r => h("option",{value:r.v},r.t)));
@@ -1341,12 +1360,16 @@ $("btnProcess").onclick = async () => {
   const note = $("procNote"); note.className = "note"; note.textContent = "结算中…";
   const btn = $("btnProcess"); btn.disabled = true;
   state.lastAwards = awards;      // 记住本次配置，供预览对比「应选 N vs 实选人数」
+  // 普惠奖模式下该开关无意义，强制 false，避免日志/标签误标「含中奖者」
+  const allowWinnerPart = $("allowWinnerPart").checked && !isUniversalMode();
+  state.lastAllowWinnerPart = allowWinnerPart;   // 供预览标签 + 导出复用（与结算口径一致）
   const payload = {
     raw_comments: state.raw,
     players: state.players,
     dedup_strategy: $("dedupSel").value,
     target_langs: getChecked($("targetLangs")),
     awards,
+    allow_winner_participation: allowWinnerPart,
   };
   try {
     const res = await fetch("/api/process", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) }).then(r=>r.json());
@@ -1395,10 +1418,12 @@ function renderResults(res) {
     const list = res.awards[name];
     box.appendChild(sheet("award","奖项", name, list.length, playerTable(list), wanted[name]));
   });
-  // 普惠奖模式（无任何抽选奖项）→ 这些人是发奖对象，标为「普惠奖（全员）」；否则是抽奖落选的「参与奖」
+  // 普惠奖模式（无任何抽选奖项）→ 全员发奖，标「普惠奖（全员）」；
+  // 否则是「参与奖」：默认为落选者（未中奖），开了重复开关则含中奖者。
   const universal = Object.keys(res.awards).length === 0;
-  box.appendChild(sheet("part", universal ? "普惠" : "参与奖",
-    universal ? "普惠奖（全员）" : "参与奖（未中奖）",
+  const partTitle = universal ? "普惠奖（全员）"
+    : (state.lastAllowWinnerPart ? "参与奖（含中奖者）" : "参与奖（未中奖）");
+  box.appendChild(sheet("part", universal ? "普惠" : "参与奖", partTitle,
     res.participation.length, playerTable(res.participation)));
   box.appendChild(sheet("inv","无效","无效名单", res.invalid.length, invalidTable(res.invalid)));
 }
@@ -1421,7 +1446,8 @@ $("btnExport").onclick = async () => {
   const old = btn.textContent; btn.textContent = ""; btn.appendChild(h("span",{class:"spinner"})); btn.append("请在弹出的窗口选择保存位置…");
   try {
     const res = await fetch("/api/export", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({
-      awards: state.result.awards, participation: state.result.participation, invalid: state.result.invalid
+      awards: state.result.awards, participation: state.result.participation, invalid: state.result.invalid,
+      allow_winner_participation: !!state.lastAllowWinnerPart
     }) }).then(r=>r.json());
     if (!res.ok) {
       if (res.cancelled) { toast("已取消导出"); return; }

@@ -103,8 +103,12 @@ def _run_eastblue(job_id, url, ids):
         JOBS[job_id]["done"] = True
 
 
-def process_pipeline(raw_comments, players, dedup_strategy, target_langs, awards):
-    """完整 Phase 1 流程：提取→去重→匹配→语言筛选→发奖。返回可预览的各 sheet。"""
+def process_pipeline(raw_comments, players, dedup_strategy, target_langs, awards,
+                     allow_winner_participation=False):
+    """完整 Phase 1 流程：提取→去重→匹配→语言筛选→发奖。返回可预览的各 sheet。
+    allow_winner_participation：抽选中奖者是否也进参与奖名单。
+      False(默认)=参与奖仅未中奖者（历史行为）；True=参与奖 = 全体有效参与者（含中奖者）。
+      仅影响参与奖名单构成，不改变抽选奖之间「一人最多中一档」。"""
     invalid = []
     rows = []
     for c in raw_comments:
@@ -132,7 +136,10 @@ def process_pipeline(raw_comments, players, dedup_strategy, target_langs, awards
     invalid.extend(lang_rejected)
 
     result, remaining = run_awards(passed, awards)
-    return {"awards": result, "participation": remaining, "invalid": invalid}
+    # 开关开：参与奖 = 全体有效参与者（含中奖者）；关：仅未中奖者。
+    # 普惠奖(awards 为空)时 passed == remaining，开关无实际差异。
+    participation = passed if allow_winner_participation else remaining
+    return {"awards": result, "participation": participation, "invalid": invalid}
 
 
 def write_run_log(inputs, out):
@@ -142,7 +149,12 @@ def write_run_log(inputs, out):
     try:
         awards_cfg = inputs.get("awards") or []
         universal = not awards_cfg          # 空奖项 = 普惠奖（全员）
-        part_label = "普惠奖（全员）" if universal else "参与奖（未中奖）"
+        if universal:
+            part_label = "普惠奖（全员）"
+        elif inputs.get("allow_winner_participation"):
+            part_label = "参与奖（含中奖者）"
+        else:
+            part_label = "参与奖（未中奖）"
         now = datetime.datetime.now()
         rec = {
             "时间": now.strftime("%Y-%m-%d %H:%M:%S"),
@@ -229,7 +241,8 @@ class Handler(BaseHTTPRequestHandler):
                 out = process_pipeline(
                     b["raw_comments"], b.get("players", {}),
                     b.get("dedup_strategy", "earliest"),
-                    b.get("target_langs", ["en"]), b.get("awards", []))
+                    b.get("target_langs", ["en"]), b.get("awards", []),
+                    allow_winner_participation=bool(b.get("allow_winner_participation")))
                 log_path = write_run_log(b, out)      # 落审计日志，不影响返回
                 self._json({"ok": True, "log_path": log_path, **out})
             elif self.path == "/api/export":
@@ -241,7 +254,8 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 if kind == "fallback":          # 非 Mac / 无原生对话框：落到默认工作区
                     out_path = os.path.join(common.work_dir(), default_name)
-                export_reward_workbook(out_path, b["awards"], b["participation"], b["invalid"])
+                export_reward_workbook(out_path, b["awards"], b["participation"], b["invalid"],
+                                       allow_winner_participation=bool(b.get("allow_winner_participation")))
                 self._json({"ok": True, "path": out_path})
             elif self.path == "/api/eastblue":
                 b = self._body()

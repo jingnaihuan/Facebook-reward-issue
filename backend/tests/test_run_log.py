@@ -27,6 +27,20 @@ def test_run_log_records_awards_seed_and_names(tmp_path, monkeypatch):
     assert rec["无效"][0]["原因"] == "无有效ID"
 
 
+def test_run_log_labels_participation_including_winners(tmp_path, monkeypatch):
+    """开「中奖者可重复领参与奖」：日志里参与奖标签改为「参与奖（含中奖者）」。"""
+    monkeypatch.setattr(server.common, "work_dir", lambda: str(tmp_path))
+    inputs = {"dedup_strategy": "earliest", "target_langs": ["en"],
+              "awards": [{"name": "先锋奖", "rule": "top_floors", "n": 2}],
+              "allow_winner_participation": True}
+    path = server.write_run_log(inputs, _out())
+
+    rec = json.loads(open(path, encoding="utf-8").read())
+    assert rec["模式"] == "抽选"
+    assert rec["参与奖（含中奖者）"] == ["1000000003"]
+    assert "参与奖（未中奖）" not in rec
+
+
 def test_run_log_universal_labels_participation(tmp_path, monkeypatch):
     monkeypatch.setattr(server.common, "work_dir", lambda: str(tmp_path))
     inputs = {"dedup_strategy": "earliest", "target_langs": ["en"], "awards": []}

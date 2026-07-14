@@ -57,6 +57,9 @@ def _goto_kwargs(monkeypatch, fn, *args):
 
 
 def test_attempt_goto_relaxed_wait(monkeypatch, tmp_path):
+    # 就绪判定已抽到 _wait_ready_or_login；此处只考察 goto 参数，故把它 stub 成 goto 后即收尾
+    monkeypatch.setattr(ed, "_wait_ready_or_login",
+                        lambda page, timeout: (_ for _ in ()).throw(_StopAfterGoto()))
     kw = _goto_kwargs(monkeypatch, ed._attempt,
                       None, "http://x", ["1"], str(tmp_path), True, 9000)
     assert kw.get("wait_until") == "domcontentloaded"

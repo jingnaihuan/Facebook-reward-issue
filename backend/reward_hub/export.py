@@ -24,15 +24,22 @@ def _write_invalid_sheet(ws, rows):
                    r.get("reject_reason", "")])
 
 
-def export_reward_workbook(path, awards, participation, invalid):
-    """awards: {奖项名: [玩家]}；participation: [玩家]；invalid: [无效记录]。"""
+def export_reward_workbook(path, awards, participation, invalid,
+                           allow_winner_participation=False):
+    """awards: {奖项名: [玩家]}；participation: [玩家]；invalid: [无效记录]。
+    allow_winner_participation：参与奖是否含抽选中奖者（仅用于 sheet 标题标注）。"""
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
     for name, winners in awards.items():
         _write_player_sheet(wb.create_sheet(title=name[:31]), winners)
     # 无任何抽选奖项 = 普惠奖（全员）：这些人是发奖对象，工作簿名标清；
-    # 有抽选奖项时，这一档是落选者的「参与奖」。
-    part_title = "普惠奖（全员）" if not awards else "参与奖"
+    # 有抽选奖项时，这一档是落选者的「参与奖」；若允许中奖者重复领，则标注「含中奖者」。
+    if not awards:
+        part_title = "普惠奖（全员）"
+    elif allow_winner_participation:
+        part_title = "参与奖（含中奖者）"
+    else:
+        part_title = "参与奖"
     _write_player_sheet(wb.create_sheet(title=part_title), participation)
     _write_invalid_sheet(wb.create_sheet(title="无效"), invalid)
     wb.save(path)
