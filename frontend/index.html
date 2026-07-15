@@ -270,10 +270,24 @@
   .award-row .seed-wrap { transition: opacity .18s; }
   .award-row .seed-wrap.hide { opacity: .3; pointer-events: none; }
   .award-row button.rm { padding: 11px 13px; }
+  .award-row .award-actions { display: flex; gap: 6px; align-items: center; }
+  .award-row button.mv { padding: 10px 11px; line-height: 1; font-size: 13px; }
   .award-row input.n-lock { text-align: center; color: var(--muted); background: var(--ink-2, var(--ink)); cursor: default; }
-  /* 选了普惠奖后其他奖项被忽略：名称/规则/数量/种子四列置灰不可改，但保留「删除」可点 */
-  .award-row.locked-by-uni > div { opacity: .38; }
+  /* 关键词行：整行让出一条 cyan 通栏放「正确答案」输入，一眼区分答题奖与普通奖 */
+  .award-row .kw-wrap { grid-column: 1 / -1; border-top: 1px dashed var(--border); padding-top: 12px; margin-top: 2px; }
+  .award-row .kw-wrap.hide { display: none; }
+  .award-row .kw-head { display: flex; align-items: baseline; gap: 9px; margin-bottom: 7px; }
+  .award-row .kw-head .fld { margin: 0; }
+  .award-row .kw-tag { font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 6px;
+    background: var(--cyan-dim); color: var(--cyan); letter-spacing: .04em; }
+  .award-row .kw-tag.req { background: var(--gold-dim); color: var(--gold); }
+  .award-row .kw-hint { font-size: 11.5px; color: var(--muted); }
+  .award-row.has-kw { border-color: rgba(85,214,200,.42); box-shadow: 0 0 0 1px rgba(85,214,200,.14) inset; }
+  /* 选了普惠奖后其他奖项被忽略：名称/规则/数量/种子四列置灰不可改，但保留「删除/移动」可点 */
+  .award-row.locked-by-uni > div:not(.award-actions) { opacity: .38; }
   #uniHint { color: var(--gold); margin: -4px 0 10px; }
+  /* 结算顺序说明：cyan 信息卡 */
+  .order-note { margin: 2px 0 14px; }
 
   /* ── Result sheets ── */
   .sheet { margin-bottom: 20px; }
@@ -635,11 +649,16 @@
   <!-- ══════════ STEP 5 ══════════ -->
   <section class="step" data-step="5">
     <div class="card">
-      <div class="step-head"><span class="no">STEP 05</span><h2>发奖规则 + 导出</h2><span class="hint">奖项按序结算（不存入预设）</span></div>
+      <div class="step-head"><span class="no">STEP 05</span><h2>发奖规则 + 导出</h2><span class="hint">奖项从上到下依次结算 · 不存入预设</span></div>
 
       <div id="awardList"></div>
       <div id="uniHint" class="note" style="display:none;">已选「普惠奖（全员）」：将忽略其他奖项，所有经过前四步筛选的有效参与者都会进入发奖名单。</div>
-      <button class="btn-ghost btn-sm" id="btnAddAward" style="margin-top:4px;">+ 添加奖项</button>
+      <div class="row" style="gap:10px; margin-top:4px;">
+        <button class="btn-ghost btn-sm" id="btnAddAward">+ 添加奖项</button>
+      </div>
+      <div class="callout cyan order-note">
+        <b>结算顺序 = 优先级</b>：奖项从上到下依次结算，中了就不进后面的奖池（参与奖可勾选下方按钮依旧计入）；想让某个奖优先结算，用 <code>↑</code> 把它往上移。
+      </div>
 
       <div id="repeatPartWrap" style="margin-top:15px; display:flex; align-items:center; gap:11px; flex-wrap:wrap;">
         <label class="chip" id="repeatPartChip"><input type="checkbox" id="allowWinnerPart" /> <span>被抽选中奖者也可领参与奖</span></label>
@@ -1257,11 +1276,13 @@ $("btnDownload").onclick = async () => {
 
 /* ═══════════ STEP 5：发奖规则 ═══════════ */
 const UNIVERSAL = "universal";        // 普惠奖：不抽选、全员发放（= 不设任何奖项，后端空 awards 即此语义）
+const ANSWERED_ALL = "answered_all";  // 关键词·答对即得（全发，不限人数），必须配关键词
 const RULES = [
   {v:"top_floors", t:"前 N 楼"},
   {v:"top_likes", t:"点赞最高 N"},
   {v:"top_replies", t:"回复最高 N"},
   {v:"random_pick", t:"随机抽 N"},
+  {v:ANSWERED_ALL, t:"全部命中（答对即得）"},
   {v:UNIVERSAL, t:"普惠奖（全员）"},
 ];
 // 普惠奖独占：任一行选了普惠奖，则其他奖项行 + 「添加奖项」全部置灰忽略。
@@ -1293,41 +1314,70 @@ function addAwardRow(preset) {
   const nameIn = h("input",{type:"text",value:preset.name||("奖项 "+($("awardList").children.length+1)), placeholder:"奖项名称"});
   const nIn = h("input",{type:"number",value:preset.n||3});
   nIn.min = 1;
-  const nLock = h("input",{type:"text",value:"全员",class:"n-lock"});   // 普惠奖时替换数量输入框，显示「全员」
+  const nLock = h("input",{type:"text",value:"全员",class:"n-lock"});   // 普惠/全部命中时替换数量框
   nLock.readOnly = true; nLock.style.display = "none";
   const seedIn = h("input",{type:"number",value:preset.seed!=null?preset.seed:42});
   const seedWrap = h("div",{class:"seed-wrap"}, h("label",{class:"fld"},"随机种子"), seedIn);
-  const delBtn = h("button",{class:"btn-danger rm"}, "删除");
+  // 关键词（正确答案）通栏：留空=普通奖；填了=只在答对的人里按本行规则选
+  const kwIn = h("input",{type:"text",value:preset.keyword||"", placeholder:"如：红色, red（逗号分隔多个答案，命中任一即算对）"});
+  const kwTag = h("span",{class:"kw-tag"},"选填");
+  const kwWrap = h("div",{class:"kw-wrap"},
+    h("div",{class:"kw-head"}, h("label",{class:"fld"},"正确答案关键词"), kwTag,
+      h("span",{class:"kw-hint"},"只在答对的玩家里选（自动排除玩家ID里的数字）")),
+    kwIn);
+  const upBtn = h("button",{class:"btn-ghost btn-sm mv", type:"button", title:"上移（越靠上越优先结算）"}, "↑");
+  const downBtn = h("button",{class:"btn-ghost btn-sm mv", type:"button", title:"下移"}, "↓");
+  const delBtn = h("button",{class:"btn-danger rm", type:"button"}, "删除");
+  const actions = h("div",{class:"award-actions"}, upBtn, downBtn, delBtn);
   const row = h("div",{class:"award-row"},
     h("div",null, h("label",{class:"fld"},"奖项名称"), nameIn),
     h("div",null, h("label",{class:"fld"},"规则"), ruleSel),
     h("div",null, h("label",{class:"fld"},"数量 N"), nIn, nLock),
     seedWrap,
-    delBtn
+    actions,
+    kwWrap
   );
   const isUni = () => ruleSel.value === UNIVERSAL;
-  // 普惠奖：名称固定「普惠奖」、数量显示「全员」、随机种子隐藏，三者锁定不可改（规则下拉保持可改以便切回）
+  const isAnsAll = () => ruleSel.value === ANSWERED_ALL;
   const sync = () => {
-    const uni = isUni();
-    nIn.style.display = uni ? "none" : "";
-    nLock.style.display = uni ? "" : "none";
-    seedWrap.classList.toggle("hide", uni || ruleSel.value !== "random_pick");
+    const uni = isUni(), ans = isAnsAll();
+    const noCount = uni || ans;                       // 普惠 / 全部命中：不设数量
+    nIn.style.display = noCount ? "none" : "";
+    nLock.style.display = noCount ? "" : "none";
+    nLock.value = ans ? "全部" : "全员";
+    seedWrap.classList.toggle("hide", ruleSel.value !== "random_pick");
+    // 普惠奖：名称固定「普惠奖」、锁定不可改（规则下拉保持可改以便切回）
     if (uni) { if (nameIn.dataset.prev == null) nameIn.dataset.prev = nameIn.value; nameIn.value = "普惠奖"; }
     else if (nameIn.dataset.prev != null) { nameIn.value = nameIn.dataset.prev; delete nameIn.dataset.prev; }
     nameIn.disabled = uni;
+    // 关键词框：普惠奖不显示；全部命中必填（金色标签），其余选填（cyan 标签）
+    kwWrap.classList.toggle("hide", uni);
+    kwTag.textContent = ans ? "必填" : "选填";
+    kwTag.classList.toggle("req", ans);
+    kwIn.placeholder = ans ? "必填：答对才发（逗号分隔多个答案，命中任一即算对）"
+                           : "如：红色, red（逗号分隔多个答案，命中任一即算对）";
+    row.classList.toggle("has-kw", !uni && (ans || !!kwIn.value.trim()));
   };
   ruleSel.onchange = () => { sync(); refreshUniversalMode(); };
+  kwIn.addEventListener("input", sync);
+  const moveTo = (ref) => { if (ref) row.parentNode.insertBefore(row, ref); };
+  upBtn.onclick = () => moveTo(row.previousElementSibling);
+  downBtn.onclick = () => { const n = row.nextElementSibling; if (n) row.parentNode.insertBefore(n, row); };
   delBtn.onclick = () => { row.remove(); refreshUniversalMode(); };
   row._isUniversal = isUni;
   row._setLockedByOther = (locked) => {
     row.classList.toggle("locked-by-uni", locked);
-    // 被普惠奖忽略的行：名称/规则/数量/种子全部锁定，但「删除」保持可用（用户可移除多余奖项）
-    [ruleSel, nIn, seedIn].forEach(el => el.disabled = locked);
+    // 被普惠奖忽略的行：名称/规则/数量/种子/关键词全部锁定，但「删除/移动」保持可用
+    [ruleSel, nIn, seedIn, kwIn].forEach(el => el.disabled = locked);
     nameIn.disabled = locked || isUni();   // 普惠奖行名称恒锁定，不被「解锁其他行」逻辑清掉
   };
   row._get = () => {
-    const a = { name: nameIn.value.trim()||"未命名奖项", rule: ruleSel.value, n: parseInt(nIn.value,10) };
-    if (ruleSel.value === "random_pick") a.seed = parseInt(seedIn.value,10)||0;
+    const rule = ruleSel.value;
+    const a = { name: nameIn.value.trim()||"未命名奖项", rule };
+    const kw = kwIn.value.trim();
+    if (kw) a.keyword = kw;
+    if (rule !== UNIVERSAL && rule !== ANSWERED_ALL) a.n = parseInt(nIn.value,10);
+    if (rule === "random_pick") a.seed = parseInt(seedIn.value,10)||0;
     return a;
   };
   $("awardList").appendChild(row);
@@ -1339,6 +1389,11 @@ addAwardRow({name:"盖楼奖", rule:"top_floors", n:5});   // 初始一行
 
 function isUniversalMode() { return [...$("awardList").children].some(r => r._isUniversal()); }
 function collectAwards() { return [...$("awardList").children].map(r => r._get()); }
+// 关键词奖名（导出时这些 sheet 追加「留言内容」列、预览也显示留言）
+function keywordAwardNames(awards) {
+  return (awards || []).filter(a => (a.keyword && a.keyword.trim()) || a.rule === ANSWERED_ALL)
+                       .map(a => a.name);
+}
 
 $("btnProcess").onclick = async () => {
   if (!state.raw.length) { toast("请先在第 1 步导入留言", "err"); gotoStep(1); return; }
@@ -1348,8 +1403,18 @@ $("btnProcess").onclick = async () => {
   } else {
     awards = collectAwards();
     if (!awards.length) { toast("请至少添加一个奖项", "err"); return; }
-    const bad = awards.find(a => !Number.isInteger(a.n) || a.n <= 0);
-    if (bad) {   // 拦住「非普惠规则 + 数量为 0/空」——否则会算出一份看似正常实则错误的名单
+    // 「全部命中（答对即得）」必须填关键词，否则等于全员发放（应改用普惠奖）
+    const noKw = awards.find(a => a.rule === ANSWERED_ALL && !(a.keyword && a.keyword.trim()));
+    if (noKw) {
+      const msg = "「" + noKw.name + "」用了「全部命中（答对即得）」，必须填写正确答案关键词；" +
+                  "若想给全部有效参与者发奖，请改用「普惠奖（全员）」。";
+      const nt = $("procNote"); nt.className = "flash err"; nt.textContent = msg;
+      toast("请填写关键词", "err");
+      return;
+    }
+    // 需要数量 N 的规则（普惠/全部命中除外）：拦住数量为 0/空，否则会算出看似正常实则错误的名单
+    const bad = awards.find(a => a.rule !== ANSWERED_ALL && (!Number.isInteger(a.n) || a.n <= 0));
+    if (bad) {
       const msg = "「" + bad.name + "」的数量 N 必须大于 0。请填写正确的数量；" +
                   "若想给全部有效参与者发奖，请在「规则」里选择「普惠奖（全员）」。";
       const nt = $("procNote"); nt.className = "flash err"; nt.textContent = msg;
@@ -1391,11 +1456,14 @@ const PLAYER_COLS = [
   ["role_level","等级"],["villa","别墅"],["server","服务器"],["total_recharge","充值"],
   ["last_login","最后登录"],["likes","赞"],["replies","回复"],
 ];
-function playerTable(list) {
+function playerTable(list, withContent) {
   if (!list || !list.length) return h("div",{class:"empty"},"（空）");
-  const head = PLAYER_COLS.map(c => c[1]);
-  const trs = list.map(p => h("tr", null, ...PLAYER_COLS.map(c =>
-    h("td",{class:"mono"}, p[c[0]] != null && p[c[0]] !== "" ? String(p[c[0]]) : "—"))));
+  const cols = withContent ? PLAYER_COLS.concat([["content","留言内容"]]) : PLAYER_COLS;
+  const head = cols.map(c => c[1]);
+  const trs = list.map(p => h("tr", null, ...cols.map(c =>
+    c[0] === "content"
+      ? h("td",{class:"content-cell"}, p.content || "—")
+      : h("td",{class:"mono"}, p[c[0]] != null && p[c[0]] !== "" ? String(p[c[0]]) : "—"))));
   return tableEl(head, trs);
 }
 function invalidTable(list) {
@@ -1414,9 +1482,11 @@ function renderResults(res) {
   // 本次每个奖项要选多少（应选 N），用于和实选人数对比，把「池子不够/数量填错」这类哑故障标红
   const wanted = {};
   (state.lastAwards || []).forEach(a => { wanted[a.name] = a.n; });
+  const kwNames = new Set(keywordAwardNames(state.lastAwards));   // 这些奖项预览加「留言内容」列
   Object.keys(res.awards).forEach(name => {
     const list = res.awards[name];
-    box.appendChild(sheet("award","奖项", name, list.length, playerTable(list), wanted[name]));
+    box.appendChild(sheet("award", kwNames.has(name) ? "答题奖" : "奖项", name,
+      list.length, playerTable(list, kwNames.has(name)), wanted[name]));
   });
   // 普惠奖模式（无任何抽选奖项）→ 全员发奖，标「普惠奖（全员）」；
   // 否则是「参与奖」：默认为落选者（未中奖），开了重复开关则含中奖者。
@@ -1447,7 +1517,8 @@ $("btnExport").onclick = async () => {
   try {
     const res = await fetch("/api/export", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({
       awards: state.result.awards, participation: state.result.participation, invalid: state.result.invalid,
-      allow_winner_participation: !!state.lastAllowWinnerPart
+      allow_winner_participation: !!state.lastAllowWinnerPart,
+      keyword_award_names: keywordAwardNames(state.lastAwards)
     }) }).then(r=>r.json());
     if (!res.ok) {
       if (res.cancelled) { toast("已取消导出"); return; }

@@ -110,22 +110,22 @@ def process_pipeline(raw_comments, players, dedup_strategy, target_langs, awards
       False(默认)=参与奖仅未中奖者（历史行为）；True=参与奖 = 全体有效参与者（含中奖者）。
       仅影响参与奖名单构成，不改变抽选奖之间「一人最多中一档」。"""
     invalid = []
-    rows = []
+    valid = []                          # 提取到ID的全部留言（未去重，一人可多条）
     for c in raw_comments:
         content = c.get("content", "")
         pid = extract_id(content)
         if pid:
-            rows.append({**c, "player_id": pid})
+            valid.append({**c, "player_id": pid})
         elif not str(content).strip():
             # 纯图片/动图/贴图等无文字留言：计入无效并标清原因，不再是空白行
             invalid.append({**c, "reject_reason": "空内容（图片/动图等，无文字）"})
         else:
             invalid.append({**c, "reject_reason": "无有效ID"})
 
-    rows = dedup(rows, dedup_strategy)
-
+    # 主路径：去重→匹配→语言筛（无效名单按去重后口径统计，与既有行为一致）。
+    deduped = dedup(valid, dedup_strategy)
     matched = []
-    for r in rows:
+    for r in deduped:
         info = players.get(r["player_id"])
         if info:
             matched.append({**r, **info})
@@ -135,7 +135,16 @@ def process_pipeline(raw_comments, players, dedup_strategy, target_langs, awards
     passed, lang_rejected = filter_by_language(matched, set(target_langs))
     invalid.extend(lang_rejected)
 
-    result, remaining = run_awards(passed, awards)
+    # 关键词奖要在『玩家全部留言』上判答对（去重可能恰好留下答错那条），
+    # 故用未去重的 valid 另建一份「匹配+语言筛」的全量池；无关键词奖时不构建，零开销。
+    all_comments = None
+    if any((a.get("keyword") or "").strip() or a.get("rule") == "answered_all"
+           for a in awards):
+        all_matched = [{**r, **players[r["player_id"]]}
+                       for r in valid if players.get(r["player_id"])]
+        all_comments, _ = filter_by_language(all_matched, set(target_langs))
+
+    result, remaining = run_awards(passed, awards, all_comments=all_comments)
     # 开关开：参与奖 = 全体有效参与者（含中奖者）；关：仅未中奖者。
     # 普惠奖(awards 为空)时 passed == remaining，开关无实际差异。
     participation = passed if allow_winner_participation else remaining
@@ -255,7 +264,8 @@ class Handler(BaseHTTPRequestHandler):
                 if kind == "fallback":          # 非 Mac / 无原生对话框：落到默认工作区
                     out_path = os.path.join(common.work_dir(), default_name)
                 export_reward_workbook(out_path, b["awards"], b["participation"], b["invalid"],
-                                       allow_winner_participation=bool(b.get("allow_winner_participation")))
+                                       allow_winner_participation=bool(b.get("allow_winner_participation")),
+                                       keyword_award_names=b.get("keyword_award_names") or [])
                 self._json({"ok": True, "path": out_path})
             elif self.path == "/api/eastblue":
                 b = self._body()

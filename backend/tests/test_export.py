@@ -69,3 +69,25 @@ def test_invalid_sheet_has_reason_column(tmp_path):
     header = [c.value for c in ws[1]]
     assert "原因" in header
     assert ws.cell(row=2, column=header.index("原因") + 1).value == "无有效ID"
+
+
+def test_keyword_award_sheet_has_content_column(tmp_path):
+    """关键词奖 sheet 追加「留言内容」列，供人工复核『确实答对了』。"""
+    out = tmp_path / "out.xlsx"
+    winner = {**_p("1000000001", 1), "content": "我猜红色 1000000001"}
+    export_reward_workbook(str(out), {"答题奖": [winner]}, [], [],
+                           keyword_award_names={"答题奖"})
+    wb = openpyxl.load_workbook(str(out))
+    ws = wb["答题奖"]
+    header = [c.value for c in ws[1]]
+    assert header == PLAYER_COLS + ["留言内容"]
+    assert ws.cell(row=2, column=len(header)).value == "我猜红色 1000000001"
+
+
+def test_non_keyword_award_sheet_has_no_content_column(tmp_path):
+    """普通奖 sheet 不加留言列（不改动既有导出列）。"""
+    out = tmp_path / "out.xlsx"
+    export_reward_workbook(str(out), {"盖楼奖": [_p("1000000001", 1)]}, [], [],
+                           keyword_award_names={"答题奖"})   # 盖楼奖不在关键词集合里
+    wb = openpyxl.load_workbook(str(out))
+    assert [c.value for c in wb["盖楼奖"][1]] == PLAYER_COLS
