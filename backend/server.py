@@ -15,6 +15,7 @@ from reward_hub.language_filter import filter_by_language
 from reward_hub.rule_engine import run_awards
 from reward_hub.export import export_reward_workbook
 from reward_hub.config_store import ConfigStore
+from reward_hub.version import VERSION
 
 # 前端资源目录：冻结后从 PyInstaller 解包目录(_MEIPASS)读，开发模式从仓库 frontend/ 读。
 if common.is_frozen():
@@ -214,7 +215,9 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(data)
         elif self.path in ("/api/ping", "/api/keepalive"):
             _touch_alive()          # 前端每 4s 心跳；看门狗据此判断网页是否还开着
-            self._json({"ok": True})
+            # 回传版本：启动器据此判断线上后台是否为当前 exe 版本（决定复用还是杀旧重起）；
+            # 前端页脚也用它显示版本。老版本不带此字段，会被启动器判为「旧版」而接管。
+            self._json({"ok": True, "version": VERSION})
         elif self.path == "/api/shutdown":
             # 主动退出（app_entry 启动新实例前先请旧实例自愿退出）。先回包再退，避免连接被重置。
             self._json({"ok": True})
@@ -390,7 +393,7 @@ def main():
     threading.Thread(target=_watchdog, daemon=True).start()
 
     httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)  # 此时已 bind+listen
-    print("发奖中台已启动：http://localhost:%d" % PORT, flush=True)
+    print("发奖中台 v%s 已启动：http://localhost:%d" % (VERSION, PORT), flush=True)
     threading.Timer(0.6, _open_browser).start()
     try:
         httpd.serve_forever()

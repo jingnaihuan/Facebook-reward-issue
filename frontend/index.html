@@ -709,7 +709,7 @@
     </div>
   </section>
 
-  <footer>本机运行 · 数据不出本地 · localhost:18765</footer>
+  <footer>本机运行 · 数据不出本地 · localhost:18765 · <span id="appVer">—</span></footer>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -763,6 +763,7 @@ function pingServer(){
     const p = $("statusPill");
     if (d.ok) { p.className = "status-pill on"; $("statusText").textContent = "服务已就绪"; }
     else { p.className = "status-pill err"; $("statusText").textContent = "服务异常"; }
+    if (d.version) $("appVer").textContent = "v" + d.version;   // 页脚显示后台版本，便于确认新旧
   }).catch(()=>{ $("statusPill").className = "status-pill err"; $("statusText").textContent = "已断连（请重新双击启动脚本）"; });
 }
 pingServer();

@@ -37,10 +37,12 @@ hiddenimports = pw_hidden + opx_hidden + [
     "reward_hub.dedup",
     "reward_hub.language_filter",
     "reward_hub.rule_engine",
+    "reward_hub.keyword",
     "reward_hub.export",
     "reward_hub.config_store",
     "reward_hub.eastblue_download",
     "reward_hub.eastblue_parse",
+    "reward_hub.version",
     # Windows「另存为」用 tkinter（懒加载在函数内），显式列出确保被打入。
     "tkinter",
     "tkinter.filedialog",

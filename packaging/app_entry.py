@@ -24,6 +24,7 @@
 """
 import os
 import sys
+import json
 import time
 import shlex
 import threading
@@ -40,6 +41,8 @@ if os.path.isdir(_BACKEND) and _BACKEND not in sys.path:
 PORT = 18765
 PING_BASE = "http://127.0.0.1:%d" % PORT      # 本机健康检查 / shutdown（内部用，不给 FB）
 OPEN_URL = "http://localhost:%d/" % PORT      # 打开给用户的地址（FB 登录只认 localhost）
+
+from reward_hub.version import VERSION         # 单一版本源（_BACKEND 已在 sys.path 中）
 
 # 是否抑制自动开浏览器（测试 / 预览器托管）。★ 必须在 main 改写 env 之前、于导入期捕获：
 # 分离式后台服务由 _spawn_detached_server 以 REWARD_HUB_NO_BROWSER=1 拉起（阻止 server 自开、
@@ -81,13 +84,29 @@ def _open_browser():
         pass
 
 
-def _ping_alive():
-    """探测旧后台是否还活着；活着就别再起一个 server（双开会让浏览器多打一个标签页）。"""
+def _probe():
+    """探测本机 18765 上的服务：返回 (是否在跑, 其版本或 None)。
+    老版本 /api/ping 不带 version 字段 → 返回 (True, None)，会被判为「旧版」需接管。"""
     try:
         with urllib.request.urlopen(PING_BASE + "/api/ping", timeout=1) as r:
-            return r.status == 200
+            if r.status != 200:
+                return (False, None)
+            data = json.loads(r.read().decode("utf-8") or "{}")
+            return (True, data.get("version"))
     except Exception:
-        return False
+        return (False, None)
+
+
+def _ping_alive():
+    """旧后台是否还活着（不看版本）。保留兼容，内部统一走 _probe。"""
+    return _probe()[0]
+
+
+def _should_reuse(alive, running_version, my_version):
+    """是否复用线上旧后台：仅当『有服务 且 版本与当前 exe 一致』。
+    版本不符 / 旧版无 version 字段 / 无服务 → 一律 False（需杀旧重起），
+    修复「更新 exe 后旧后台仍在、新版被静默沿用」。"""
+    return bool(alive) and running_version == my_version
 
 
 def _kill_old():
@@ -209,11 +228,12 @@ def _spawn_detached_server():
 
 
 def _mac_launch():
-    """Mac 启动器：确保后台服务在跑 → 打开浏览器 → 退出（不挂起）。"""
-    if _ping_alive():
+    """Mac 启动器：线上后台若与当前版本一致就复用 → 打开浏览器；否则杀旧重起。"""
+    alive, ver = _probe()
+    if _should_reuse(alive, ver, VERSION):
         _open_browser()
         return
-    _kill_old()
+    _kill_old()                 # 旧版/残留后台先关掉，避免占用 18765 导致新版起不来
     _spawn_detached_server()
     if _wait_ready():
         _open_browser()
@@ -222,8 +242,10 @@ def _mac_launch():
 
 
 def _legacy_launch():
-    """Windows 原逻辑（不改动）：进程内起服务并前台挂起，退出交给服务端看门狗。"""
-    if _ping_alive():
+    """Windows 启动器：线上后台若与当前版本一致就复用；否则杀旧重起（进程内起服务并前台挂起，
+    退出交给服务端看门狗）。★ 版本判断修复：更新 exe 后旧后台仍在时不再静默沿用旧版。"""
+    alive, ver = _probe()
+    if _should_reuse(alive, ver, VERSION):
         _open_browser()
         return
     _kill_old()
