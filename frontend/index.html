@@ -631,10 +631,8 @@
         </div>
       </div>
 
-      <div style="margin-top:16px;">
-        <label class="fld">游戏语种 (game_langs)</label>
-        <div class="chip-tools"><a id="langAll3">全选</a><a id="langNone3">清空</a></div>
-        <div class="chips" id="gameLangs"></div>
+      <div class="callout" style="margin-top:16px;">
+        本步骤按玩家ID精确拉取，会自动覆盖<b>全部语言</b>的玩家（不受玩家语言限制）；语言筛选放到下一步「语言筛选」按本次活动目标语种进行。
       </div>
 
       <div class="grid c2" style="margin-top:16px;align-items:end;">
@@ -646,9 +644,6 @@
       <div class="row">
         <button class="btn-cyan" id="btnDownload">按玩家ID拉取玩家表</button>
         <span class="note" id="dlNote">用第 1、2 步提取到的玩家ID，在 Eastblue 按 ID 精确查询（叠加下方筛选）。后台无窗口进行，首次/登录过期才会弹出浏览器。</span>
-      </div>
-      <div class="callout cyan" style="margin-top:14px;" id="dlUrlBox">
-        <b>请求 URL：</b><span id="dlUrl" class="note" style="word-break:break-all;font-family:var(--mono);"></span>
       </div>
       <div id="dlProgress" class="dl-progress" style="display:none;"></div>
 
@@ -1194,7 +1189,7 @@ function buildLangChips(container, checkedSet) {
     const cb = h("input", { type:"checkbox", value:l, checked: checkedSet.has(l) });
     const chip = h("label", { class: "chip" + (checkedSet.has(l) ? " on" : "") },
       cb, h("span", null, LANG_NAMES[l]), h("span",{class:"cc"}, l));
-    cb.onchange = () => { chip.classList.toggle("on", cb.checked); if (container.id==="gameLangs") buildEastblueUrl(); };
+    cb.onchange = () => chip.classList.toggle("on", cb.checked);
     container.appendChild(chip);
   });
 }
@@ -1208,11 +1203,8 @@ function setChecked(container, arr) {
     cb.checked = set.has(cb.value); chip.classList.toggle("on", cb.checked);
   });
 }
-buildLangChips($("gameLangs"), new Set(LANGS));       // step3 默认全选
 buildLangChips($("targetLangs"), new Set(["en"]));    // step4 默认 en
 
-$("langAll3").onclick = () => { setChecked($("gameLangs"), LANGS); buildEastblueUrl(); };
-$("langNone3").onclick = () => { setChecked($("gameLangs"), []); buildEastblueUrl(); };
 $("langAll4").onclick = () => setChecked($("targetLangs"), LANGS);
 $("langNone4").onclick = () => setChecked($("targetLangs"), []);
 [$("cfgGameId"),$("cfgSearchNum"),$("cfgLastAct"),$("cfgServers"),$("cfgExceptInternal")].forEach(el => el.oninput = el.onchange = buildEastblueUrl);
@@ -1227,16 +1219,16 @@ syncEiChip();
 
 function buildEastblueUrl() {
   const gid = $("cfgGameId").value || "97";
-  const gl = getChecked($("gameLangs")).join(",");
   const ei = $("cfgExceptInternal").checked ? "1" : "0";
   const sn = $("cfgSearchNum").value || "1000";
   const la = $("cfgLastAct").value;
   const servers = $("cfgServers").value.trim();
+  // 注意：Eastblue 会忽略 URL 里的语言参数(attribute_langs/game_langs)，真正的「玩家语言」
+  // 范围由后台在页面上把该筛选设为「全部」来放开(见 backend/reward_hub/eastblue_download.py)，
+  // 故此处不再传语言参数。game_id/except_internal/search_num/last_act_time/server_ids 仍被后台采纳。
   let url = "https://eastblue.xinyoudi.com/home/#/player-management?game_id=" + gid +
-    "&attribute_langs=en&game_langs=" + gl + "&except_internal=" + ei +
-    "&search_num=" + sn + "&last_act_time=" + la;
+    "&except_internal=" + ei + "&search_num=" + sn + "&last_act_time=" + la;
   if (servers) url += "&server_ids=" + encodeURIComponent(servers);
-  $("dlUrl").textContent = url;
   return url;
 }
 
@@ -1667,7 +1659,6 @@ function currentConfig() {
     dedup_strategy: $("dedupSel").value,
     eastblue: {
       game_id: $("cfgGameId").value,
-      game_langs: getChecked($("gameLangs")),
       except_internal: $("cfgExceptInternal").checked ? 1 : 0,
       search_num: $("cfgSearchNum").value,
       last_act_time: $("cfgLastAct").value,
@@ -1685,7 +1676,6 @@ function applyConfig(cfg) {
   if (eb.last_act_time) $("cfgLastAct").value = eb.last_act_time;
   if (eb.server_ids != null) $("cfgServers").value = eb.server_ids;
   if (eb.except_internal != null) { $("cfgExceptInternal").checked = !!eb.except_internal; syncEiChip(); }
-  if (Array.isArray(eb.game_langs)) setChecked($("gameLangs"), eb.game_langs);
   if (Array.isArray(cfg.target_langs)) setChecked($("targetLangs"), cfg.target_langs);
   buildEastblueUrl();
 }
@@ -1704,7 +1694,6 @@ function renderConfigView(cfg, title) {
     ["游戏 ID", eb.game_id != null && eb.game_id !== "" ? eb.game_id : "—"],
     ["拉取上限", eb.search_num != null && eb.search_num !== "" ? eb.search_num : "—"],
     ["活跃时间", LASTACT_NAMES[eb.last_act_time] || eb.last_act_time || "—"],
-    ["游戏语种", langLabels(eb.game_langs)],
     ["排除内玩", eb.except_internal ? "是" : "否"],
     ["服务器", (eb.server_ids && String(eb.server_ids).trim()) || "全部"],
     ["目标语种", langLabels(cfg.target_langs)],

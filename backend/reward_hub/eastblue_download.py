@@ -10,7 +10,7 @@
 
 默认无窗口(headless)运行；若未登录/登录过期，自动弹出可见浏览器，人工登录后 profile 持久化。
 """
-import os, sys, re, argparse, time
+import os, sys, re, json, argparse, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 try:
     from reward_hub.common import emit, app_data_dir, work_dir, force_utf8_std
@@ -29,7 +29,39 @@ def _strip_auto_download(url):
     return url
 
 
+def _lang_count_in_search(post_data):
+    """从「搜索」请求体(JSON字符串)里取 filters.game_langs 的语言数量；解析失败返回 0。
+    供 _search_and_export 校验语言范围是否已放开——<2 视为未生效（仍被锁在单一语言）。"""
+    try:
+        post = json.loads(post_data or "{}")
+        return len((post.get("filters") or {}).get("game_langs") or [])
+    except Exception:
+        return 0
+
+
+def _select_all_player_languages(page):
+    """把顶部「玩家语言」筛选设为“全部语言”。
+
+    Eastblue 会忽略 URL 里的 attribute_langs / game_langs 语言参数：页面按登录 token 的语言
+    (通常 en) 初始化「玩家语言」筛选，只筛该语言的玩家。按「玩家ID」精确查询时，这会把语言不
+    是 en 的玩家判成“无记录”而漏掉（本是发奖参与者）。按ID精确查询本应拿回所有目标玩家、语言
+    业务筛选交给后续「语言筛选」步骤，故此处等价于人工在筛选栏把「玩家语言」勾成全部：
+    点开该筛选 →「全选」→ 收起。是否真正放开，由 _search_and_export 校验搜索请求体兜底。"""
+    _progress("放开「玩家语言」筛选为全部…")
+    block = page.locator("div.efiMain").filter(has_text="玩家语言").first
+    block.locator(".selectButton").first.click()
+    page.wait_for_timeout(1000)
+    # 只在“当前可见”的下拉弹层里点「全选」：避免匹配到页面里残留/隐藏的其它 .ep-popper。
+    # 「全选」「清除」是两个独立按钮(非切换)，故重复点「全选」是幂等的、始终=全部选中。
+    page.locator(".ep-popper:visible").filter(has_text="全选").get_by_text("全选", exact=True).first.click()
+    page.wait_for_timeout(800)
+    page.keyboard.press("Escape")          # 收起下拉，避免遮挡后续「+增加条件」
+    page.wait_for_timeout(600)
+
+
 def _search_and_export(page, ids, outdir):
+    # 0) 放开「玩家语言」为全部：否则页面默认只按登录语言(en)筛，非该语言玩家会被漏成「无记录」
+    _select_all_player_languages(page)
     # 1) 增加条件
     _progress("添加「玩家ID」筛选条件…")
     page.get_by_text("+增加条件", exact=False).first.click()
@@ -55,6 +87,13 @@ def _search_and_export(page, ids, outdir):
         page.get_by_role("button", name="搜索", exact=True).first.click()
     if resp_info.value.status >= 400:
         raise RuntimeError("搜索接口返回 HTTP %s" % resp_info.value.status)
+    # 校验语言范围确已放开：搜索请求体 filters.game_langs 应含多种语言。若仍是单一语言，说明上面
+    # 的「全选」未生效（页面结构可能变动），此时中止并报错，避免静默只拉到单一语言、漏掉参与者。
+    _n_langs = _lang_count_in_search(resp_info.value.request.post_data)
+    if _n_langs < 2:
+        raise RuntimeError(
+            "「玩家语言」筛选未成功放开为全部（搜索请求仅含 %d 种语言），已中止以免漏拉非该语言玩家；"
+            "请检查 Eastblue 筛选栏结构是否变化。" % _n_langs)
     page.wait_for_timeout(1500)          # 结果渲染缓冲，确保导出取到完整结果
     # 5) 导出（部分导出会弹确认框；大结果集生成 xlsx 也可能较慢）
     _progress("搜索完成，正在导出…")
