@@ -301,6 +301,34 @@
   .sheet-head .expect { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: 12px; }
   .sheet-head .expect.short { color: var(--red); font-weight: 600; }   /* 实选不足 → 标红提醒 */
 
+  /* ── 玩家ID 悬停 → 该玩家留言浮层（发奖前核对回复）── */
+  td.id-hoverable { cursor: help; }
+  td.id-hoverable .idh { border-bottom: 1px dashed var(--muted-2); padding-bottom: 1px; transition: color .15s, border-color .15s; }
+  td.id-hoverable:hover .idh { color: var(--gold); border-bottom-color: var(--gold); }
+  .id-pop {
+    position: fixed; z-index: 60; width: 360px; max-width: min(360px, 92vw);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: var(--shadow-lg); overflow: hidden;
+    opacity: 0; transform: translateY(6px); visibility: hidden; pointer-events: none;
+    transition: opacity .15s ease, transform .15s ease;
+  }
+  .id-pop.show { opacity: 1; transform: translateY(0); visibility: visible; pointer-events: auto; }
+  .id-pop::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px;
+    background: linear-gradient(90deg, var(--gold-soft), var(--cyan)); opacity: .85; }
+  .id-pop .ip-head { display: flex; align-items: baseline; gap: 9px; padding: 13px 15px 10px; border-bottom: 1px solid var(--border); }
+  .id-pop .ip-id { font-family: var(--mono); font-weight: 700; font-size: 14px; color: var(--text); letter-spacing: .01em; }
+  .id-pop .ip-role { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+  .id-pop .ip-cnt { margin-left: auto; flex-shrink: 0; font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--panel-3); padding: 2px 8px; border-radius: 6px; }
+  .id-pop .ip-body { max-height: 300px; overflow-y: auto; padding: 6px; }
+  .id-pop .ip-item { padding: 9px 11px; border-radius: 10px; }
+  .id-pop .ip-item + .ip-item { margin-top: 2px; }
+  .id-pop .ip-item.used { background: var(--gold-dim); box-shadow: inset 3px 0 0 var(--gold-soft); }
+  .id-pop .ip-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-family: var(--mono); font-size: 10.5px; color: var(--muted-2); }
+  .id-pop .ip-used-tag { background: var(--gold); color: #fff; font-size: 10px; padding: 1px 7px; border-radius: 5px; letter-spacing: .03em; }
+  .id-pop .ip-text { font-size: 12.5px; line-height: 1.5; color: var(--text); white-space: normal; word-break: break-word; }
+  .id-pop .ip-stats { margin-top: 5px; font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+  .id-pop .ip-empty { padding: 20px; text-align: center; color: var(--muted); font-size: 12.5px; }
+
   /* ── Misc ── */
   .note { font-size: 12.5px; color: var(--muted); line-height: 1.65; }
   .note code { font-family: var(--mono); background: var(--ink); padding: 1.5px 6px; border-radius: 5px; color: var(--gold); font-size: 11.5px; border: 1px solid var(--border); }
@@ -685,6 +713,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="id-pop" id="idPop" role="tooltip" aria-hidden="true"></div>
 
 <script>
 /* Windows 上把等宽区域也切成微软雅黑（英文/数字一并），与页面字体统一 */
@@ -1460,10 +1489,20 @@ function playerTable(list, withContent) {
   if (!list || !list.length) return h("div",{class:"empty"},"（空）");
   const cols = withContent ? PLAYER_COLS.concat([["content","留言内容"]]) : PLAYER_COLS;
   const head = cols.map(c => c[1]);
-  const trs = list.map(p => h("tr", null, ...cols.map(c =>
-    c[0] === "content"
-      ? h("td",{class:"content-cell"}, p.content || "—")
-      : h("td",{class:"mono"}, p[c[0]] != null && p[c[0]] !== "" ? String(p[c[0]]) : "—"))));
+  const trs = list.map(p => h("tr", null, ...cols.map(c => {
+    if (c[0] === "content") return h("td",{class:"content-cell"}, p.content || "—");
+    const val = p[c[0]] != null && p[c[0]] !== "" ? String(p[c[0]]) : "—";
+    // 玩家ID 列：悬停浮出该玩家的全部留言，便于发奖前核对回复是否正确
+    if (c[0] === "player_id" && p.player_id) {
+      return h("td", {
+        class: "mono id-hoverable",
+        "data-pid": String(p.player_id),
+        "data-role": p.role_name != null ? String(p.role_name) : "",
+        "data-order": p.order != null ? String(p.order) : ""
+      }, h("span", {class:"idh"}, val));
+    }
+    return h("td",{class:"mono"}, val);
+  })));
   return tableEl(head, trs);
 }
 function invalidTable(list) {
@@ -1538,6 +1577,88 @@ function tableEl(headers, trs) {
       h("tbody",null, ...(trs.length ? trs : [h("tr",null,h("td",{colspan:headers.length},h("div",{class:"empty"},"（空）")))]))
     ));
 }
+
+/* ═══════════ 玩家ID 悬停 → 该玩家留言浮层（发奖前核对回复）═══════════
+   数据全在前端 state.raw：按 extractId 反查该 ID 的所有留言，
+   并高亮本轮结算实际采用的那条（用结算返回的 order 精确定位）。*/
+const idPop = $("idPop");
+let idPopAnchor = null, idPopHideT = null;
+
+function commentsOfPlayer(pid) {
+  return state.raw
+    .filter(c => extractId(c.content) === pid)
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+function fillIdPop(pid, role, usedOrder) {
+  const list = commentsOfPlayer(pid);
+  clear(idPop);
+  idPop.appendChild(h("div", {class:"ip-head"},
+    h("span", {class:"ip-id"}, pid),
+    role ? h("span", {class:"ip-role"}, role) : null,
+    h("span", {class:"ip-cnt"}, list.length ? list.length + " 条留言" : "无留言")));
+  const body = h("div", {class:"ip-body"});
+  if (!list.length) {
+    body.appendChild(h("div", {class:"ip-empty"}, "未找到该玩家的留言原文"));
+  } else {
+    list.forEach(c => {
+      const used = usedOrder != null && c.order === usedOrder;
+      body.appendChild(h("div", {class:"ip-item" + (used ? " used" : "")},
+        h("div", {class:"ip-meta"},
+          used ? h("span", {class:"ip-used-tag"}, "本次采用") : null,
+          h("span", null, "#" + c.order),
+          c.time ? h("span", null, c.time) : null),
+        h("div", {class:"ip-text"}, c.content),
+        h("div", {class:"ip-stats"}, "👍 " + (c.likes || 0) + "　💬 " + (c.replies || 0))));
+    });
+  }
+  idPop.appendChild(body);
+}
+function placeIdPop(rect) {                               // visibility:hidden 时仍可量到尺寸 → 先定位再淡入，无闪跳
+  const gap = 8, pw = idPop.offsetWidth, ph = idPop.offsetHeight;
+  let left = rect.left;
+  let top = rect.bottom + gap;
+  if (left + pw > window.innerWidth - 10) left = window.innerWidth - 10 - pw;
+  if (left < 10) left = 10;
+  if (top + ph > window.innerHeight - 10) {               // 下方放不下 → 翻到上方
+    const above = rect.top - gap - ph;
+    top = above >= 10 ? above : Math.max(10, window.innerHeight - 10 - ph);
+  }
+  idPop.style.left = left + "px";
+  idPop.style.top = top + "px";
+}
+function showIdPop(cell) {
+  clearTimeout(idPopHideT);
+  idPopAnchor = cell;
+  const od = cell.dataset.order;
+  fillIdPop(cell.dataset.pid, cell.dataset.role || "",
+            od != null && od !== "" ? parseInt(od, 10) : null);
+  placeIdPop(cell.getBoundingClientRect());
+  idPop.classList.add("show");
+}
+function hideIdPop() { idPop.classList.remove("show"); idPopAnchor = null; }
+function scheduleHideIdPop() { clearTimeout(idPopHideT); idPopHideT = setTimeout(hideIdPop, 120); }
+
+$("results").addEventListener("mouseover", e => {
+  const cell = e.target.closest(".id-hoverable");
+  if (!cell || cell === idPopAnchor) return;
+  showIdPop(cell);
+});
+$("results").addEventListener("mouseout", e => {
+  const cell = e.target.closest(".id-hoverable");
+  if (!cell) return;
+  const to = e.relatedTarget;
+  if (to && (to.closest(".id-hoverable") === cell || to.closest("#idPop"))) return;
+  scheduleHideIdPop();
+});
+// 允许鼠标从 ID 移到卡片上滚动查看多条留言
+idPop.addEventListener("mouseenter", () => clearTimeout(idPopHideT));
+idPop.addEventListener("mouseleave", scheduleHideIdPop);
+// 页面/表格滚动时浮层锚点会失真 → 收起（卡片内部滚动除外）
+window.addEventListener("scroll", e => {
+  if (!idPopAnchor) return;
+  if (e.target && e.target.nodeType === 1 && idPop.contains(e.target)) return;
+  hideIdPop();
+}, true);
 
 /* ═══════════ 预设：读/写 ═══════════ */
 function currentConfig() {
