@@ -63,3 +63,19 @@ def test_filter_off_matches_legacy_behavior():
     out = server.process_pipeline(raw, players, "all", ["en"], [])   # 不传 time_filter
     assert [p["player_id"] for p in out["participation"]] == ["1000000001"]
     assert out["overdue_stats"] == {"mode": "off", "overdue": 0, "no_time": 0}
+
+
+def test_run_log_records_time_filter(tmp_path, monkeypatch):
+    import reward_hub.common as common
+    monkeypatch.setattr(common, "work_dir", lambda: str(tmp_path))
+    raw = [_raw(1, "1000000001", "2023-05-15T20:00:00+0000")]
+    players = _players("1000000001")
+    out = server.process_pipeline(raw, players, "all", ["en"], [], time_filter=WIN)
+    inputs = {"raw_comments": raw, "players": players, "dedup_strategy": "all",
+              "target_langs": ["en"], "awards": [], "time_filter": WIN}
+    path = server.write_run_log(inputs, out)
+    assert path is not None
+    import json
+    rec = json.load(open(path, encoding="utf-8"))
+    assert rec["时间筛选"]["模式"] == "before"
+    assert rec["时间筛选"]["逾期数"] == 1

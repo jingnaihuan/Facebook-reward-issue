@@ -189,6 +189,16 @@ def write_run_log(inputs, out):
             "无效": [{"player_id": r.get("player_id", ""), "原因": r.get("reject_reason", "")}
                     for r in out["invalid"]],
         }
+        tf = inputs.get("time_filter") or {}
+        tf_mode = (tf.get("mode") or "off")
+        os_stats = out.get("overdue_stats", {})
+        rec["时间筛选"] = {
+            "模式": tf_mode,
+            "开始": tf.get("start", ""),
+            "结束": tf.get("end", ""),
+            "逾期数": os_stats.get("overdue", 0),
+            "无时间戳放行数": os_stats.get("no_time", 0),
+        }
         logdir = os.path.join(common.work_dir(), "结算日志")
         os.makedirs(logdir, exist_ok=True)
         path = os.path.join(logdir, "结算-%s.json" % now.strftime("%Y%m%d-%H%M%S"))
@@ -265,7 +275,8 @@ class Handler(BaseHTTPRequestHandler):
                     b["raw_comments"], b.get("players", {}),
                     b.get("dedup_strategy", "earliest"),
                     b.get("target_langs", ["en"]), b.get("awards", []),
-                    allow_winner_participation=bool(b.get("allow_winner_participation")))
+                    allow_winner_participation=bool(b.get("allow_winner_participation")),
+                    time_filter=b.get("time_filter"))
                 log_path = write_run_log(b, out)      # 落审计日志，不影响返回
                 self._json({"ok": True, "log_path": log_path, **out})
             elif self.path == "/api/export":
