@@ -13,6 +13,7 @@ from reward_hub.extract_id import extract_id
 from reward_hub.dedup import dedup
 from reward_hub.language_filter import filter_by_language
 from reward_hub.rule_engine import run_awards
+from reward_hub.time_filter import filter_by_time
 from reward_hub.export import export_reward_workbook
 from reward_hub.config_store import ConfigStore
 from reward_hub.version import VERSION
@@ -105,14 +106,20 @@ def _run_eastblue(job_id, url, ids):
 
 
 def process_pipeline(raw_comments, players, dedup_strategy, target_langs, awards,
-                     allow_winner_participation=False):
+                     allow_winner_participation=False, time_filter=None):
     """完整 Phase 1 流程：提取→去重→匹配→语言筛选→发奖。返回可预览的各 sheet。
     allow_winner_participation：抽选中奖者是否也进参与奖名单。
       False(默认)=参与奖仅未中奖者（历史行为）；True=参与奖 = 全体有效参与者（含中奖者）。
       仅影响参与奖名单构成，不改变抽选奖之间「一人最多中一档」。"""
-    invalid = []
-    valid = []                          # 提取到ID的全部留言（未去重，一人可多条）
-    for c in raw_comments:
+    # 最高优先级闸门：时间窗之外的留言直接判「逾期参与」，不进入后续任何判定。
+    in_window, overdue, tf_stats = filter_by_time(raw_comments, time_filter)
+    for r in overdue:                       # 仅为展示：尽力补 player_id，便于导出/日志核对
+        pid = extract_id(r.get("content", ""))
+        if pid:
+            r["player_id"] = pid
+    invalid = list(overdue)
+    valid = []                              # 提取到ID的全部留言（未去重，一人可多条）
+    for c in in_window:
         content = c.get("content", "")
         pid = extract_id(content)
         if pid:
@@ -149,7 +156,11 @@ def process_pipeline(raw_comments, players, dedup_strategy, target_langs, awards
     # 开关开：参与奖 = 全体有效参与者（含中奖者）；关：仅未中奖者。
     # 普惠奖(awards 为空)时 passed == remaining，开关无实际差异。
     participation = passed if allow_winner_participation else remaining
-    return {"awards": result, "participation": participation, "invalid": invalid}
+    mode = (time_filter or {}).get("mode") or "off"
+    if mode not in ("before", "after", "between"):
+        mode = "off"
+    return {"awards": result, "participation": participation, "invalid": invalid,
+            "overdue_stats": {"mode": mode, **tf_stats}}
 
 
 def write_run_log(inputs, out):
