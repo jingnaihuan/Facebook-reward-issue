@@ -1454,6 +1454,21 @@ function keywordAwardNames(awards) {
                        .map(a => a.name);
 }
 
+/* 时间筛选：按模式显示对应的时间输入框并调整标签 */
+function tfSync() {
+  const m = $("tfMode").value;
+  const showStart = (m === "after" || m === "between");
+  const showEnd = (m === "before" || m === "between");
+  $("tfStartWrap").style.display = showStart ? "" : "none";
+  $("tfEndWrap").style.display = showEnd ? "" : "none";
+  $("tfTilde").style.display = (m === "between") ? "" : "none";
+  if (m === "before") $("tfEndLbl").textContent = "结束时间（此后视为逾期）";
+  if (m === "after") $("tfStartLbl").textContent = "开始时间（此前视为无效）";
+  if (m === "between") { $("tfStartLbl").textContent = "开始时间"; $("tfEndLbl").textContent = "结束时间"; }
+}
+$("tfMode").onchange = tfSync;
+tfSync();
+
 $("btnProcess").onclick = async () => {
   if (!state.raw.length) { toast("请先在第 1 步导入留言", "err"); gotoStep(1); return; }
   let awards;
@@ -1481,6 +1496,17 @@ $("btnProcess").onclick = async () => {
       return;
     }
   }
+  // 时间筛选（最高优先级逾期判定）：校验并收集配置
+  const tfMode = $("tfMode").value;
+  let timeFilter = null;
+  if (tfMode !== "off") {
+    const tfStart = $("tfStart").value, tfEnd = $("tfEnd").value;
+    const failTf = (msg) => { const nt = $("procNote"); nt.className = "flash err"; nt.textContent = msg; toast("时间筛选未填完整", "err"); };
+    if ((tfMode === "after" || tfMode === "between") && !tfStart) { failTf("请填写时间筛选的开始时间，或将「判定模式」设为关闭。"); return; }
+    if ((tfMode === "before" || tfMode === "between") && !tfEnd) { failTf("请填写时间筛选的结束时间，或将「判定模式」设为关闭。"); return; }
+    if (tfMode === "between" && tfStart > tfEnd) { failTf("时间筛选：开始时间不能晚于结束时间。"); return; }
+    timeFilter = { mode: tfMode, start: tfStart || null, end: tfEnd || null };
+  }
   const note = $("procNote"); note.className = "note"; note.textContent = "结算中…";
   const btn = $("btnProcess"); btn.disabled = true;
   state.lastAwards = awards;      // 记住本次配置，供预览对比「应选 N vs 实选人数」
@@ -1494,6 +1520,7 @@ $("btnProcess").onclick = async () => {
     target_langs: getChecked($("targetLangs")),
     awards,
     allow_winner_participation: allowWinnerPart,
+    time_filter: timeFilter,
   };
   try {
     const res = await fetch("/api/process", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) }).then(r=>r.json());
@@ -1548,6 +1575,14 @@ function invalidTable(list) {
 
 function renderResults(res) {
   const box = $("results"); clear(box);
+  // 时间筛选摘要（最高优先级逾期判定）：模式≠关闭时展示，含无时间戳放行提示
+  const os = res.overdue_stats;
+  if (os && os.mode && os.mode !== "off") {
+    const label = { before: "某时间之前有效", after: "某时间之后有效", between: "某时间段内有效" }[os.mode] || os.mode;
+    const parts = ["⏱ 时间筛选：" + label, "逾期 " + os.overdue + " 条"];
+    if (os.no_time > 0) parts.push("无时间戳放行 " + os.no_time + " 条");
+    box.appendChild(h("div", { class: "tf-summary" }, parts.join("　·　")));
+  }
   // 本次每个奖项要选多少（应选 N），用于和实选人数对比，把「池子不够/数量填错」这类哑故障标红
   const wanted = {};
   (state.lastAwards || []).forEach(a => { wanted[a.name] = a.n; });
