@@ -687,6 +687,30 @@
     <div class="card">
       <div class="step-head"><span class="no">STEP 05</span><h2>发奖规则 + 导出</h2><span class="hint">奖项从上到下依次结算 · 不存入预设</span></div>
 
+      <div class="tf-panel" id="tfPanel">
+        <div class="tf-head"><span class="ic">⏱</span> 时间筛选 · 逾期判定 <span class="tf-utc">UTC+0</span></div>
+        <div class="tf-row">
+          <div class="tf-field">
+            <label class="fld">判定模式</label>
+            <select id="tfMode">
+              <option value="off">关闭（不按时间筛选）</option>
+              <option value="before">某时间之前有效（此后为逾期）</option>
+              <option value="after">某时间之后有效（此前无效）</option>
+              <option value="between">某时间段内有效（窗外无效）</option>
+            </select>
+          </div>
+          <div class="tf-field" id="tfStartWrap" style="display:none;">
+            <label class="fld" id="tfStartLbl">开始时间</label>
+            <input type="datetime-local" id="tfStart" />
+          </div>
+          <span class="tf-tilde" id="tfTilde" style="display:none;">~</span>
+          <div class="tf-field" id="tfEndWrap" style="display:none;">
+            <label class="fld" id="tfEndLbl">结束时间</label>
+            <input type="datetime-local" id="tfEnd" />
+          </div>
+        </div>
+        <div class="tf-note">🕒 时间基准 <b>UTC+0</b>：Facebook 抓取的留言时间即为 UTC+0；手工粘贴导入时请确保填入的时间也是 UTC+0。窗口外的留言无论 ID / 答案是否有效，一律判「逾期参与」（优先级高于一切发奖判定）。</div>
+      </div>
       <div id="awardList"></div>
       <div id="uniHint" class="note" style="display:none;">已选「普惠奖（全员）」：将忽略其他奖项，所有经过前四步筛选的有效参与者都会进入发奖名单。</div>
       <div class="row" style="gap:10px; margin-top:4px;">
