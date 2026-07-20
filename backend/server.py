@@ -191,11 +191,13 @@ def write_run_log(inputs, out):
         }
         tf = inputs.get("time_filter") or {}
         tf_mode = (tf.get("mode") or "off")
+        uses_start = tf_mode in ("after", "between")   # 只记录该模式真正用到的边界，避免残留值误导审计
+        uses_end = tf_mode in ("before", "between")
         os_stats = out.get("overdue_stats", {})
         rec["时间筛选"] = {
             "模式": tf_mode,
-            "开始": tf.get("start", ""),
-            "结束": tf.get("end", ""),
+            "开始": (tf.get("start") or "") if uses_start else "",
+            "结束": (tf.get("end") or "") if uses_end else "",
             "逾期数": os_stats.get("overdue", 0),
             "无时间戳放行数": os_stats.get("no_time", 0),
         }

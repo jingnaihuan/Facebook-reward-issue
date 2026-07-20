@@ -1505,7 +1505,12 @@ $("btnProcess").onclick = async () => {
     if ((tfMode === "after" || tfMode === "between") && !tfStart) { failTf("请填写时间筛选的开始时间，或将「判定模式」设为关闭。"); return; }
     if ((tfMode === "before" || tfMode === "between") && !tfEnd) { failTf("请填写时间筛选的结束时间，或将「判定模式」设为关闭。"); return; }
     if (tfMode === "between" && tfStart > tfEnd) { failTf("时间筛选：开始时间不能晚于结束时间。"); return; }
-    timeFilter = { mode: tfMode, start: tfStart || null, end: tfEnd || null };
+    // 只带该模式真正用到的边界（切换模式后另一个框的残留值不应发出，也不入审计日志）
+    timeFilter = {
+      mode: tfMode,
+      start: (tfMode === "after" || tfMode === "between") ? (tfStart || null) : null,
+      end: (tfMode === "before" || tfMode === "between") ? (tfEnd || null) : null,
+    };
   }
   const note = $("procNote"); note.className = "note"; note.textContent = "结算中…";
   const btn = $("btnProcess"); btn.disabled = true;

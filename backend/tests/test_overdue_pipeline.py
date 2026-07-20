@@ -79,3 +79,28 @@ def test_run_log_records_time_filter(tmp_path, monkeypatch):
     rec = json.load(open(path, encoding="utf-8"))
     assert rec["时间筛选"]["模式"] == "before"
     assert rec["时间筛选"]["逾期数"] == 1
+
+
+def test_run_log_omits_bound_not_used_by_mode(tmp_path, monkeypatch):
+    """审计清晰：某模式用不到的边界即便 payload 混入残留值，日志也不记录。"""
+    import reward_hub.common as common
+    monkeypatch.setattr(common, "work_dir", lambda: str(tmp_path))
+    import json
+    raw = [_raw(1, "1000000001", "2023-05-15T10:00:00+0000")]
+    players = _players("1000000001")
+    base = {"raw_comments": raw, "players": players, "dedup_strategy": "all",
+            "target_langs": ["en"], "awards": []}
+
+    # before 模式：混入残留 start，日志不该记录 start，只记 end
+    cfg = {"mode": "before", "start": "2023-05-15T09:00", "end": "2023-05-15T18:00"}
+    out = server.process_pipeline(raw, players, "all", ["en"], [], time_filter=cfg)
+    rec = json.load(open(server.write_run_log({**base, "time_filter": cfg}, out), encoding="utf-8"))
+    assert rec["时间筛选"]["开始"] == ""
+    assert rec["时间筛选"]["结束"] == "2023-05-15T18:00"
+
+    # after 模式对称：不记 end，只记 start
+    cfg2 = {"mode": "after", "start": "2023-05-15T10:00", "end": "2023-05-15T18:00"}
+    out2 = server.process_pipeline(raw, players, "all", ["en"], [], time_filter=cfg2)
+    rec2 = json.load(open(server.write_run_log({**base, "time_filter": cfg2}, out2), encoding="utf-8"))
+    assert rec2["时间筛选"]["开始"] == "2023-05-15T10:00"
+    assert rec2["时间筛选"]["结束"] == ""
